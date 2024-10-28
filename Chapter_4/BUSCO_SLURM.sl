@@ -19,3 +19,4 @@ for assembly_file in *.fasta; do
     # Run BUSCO 
     busco -i "$assembly_file" -l agaricales_odb10 -m genome -c 16 -o "QC/BUSCO_$assembly_name"
 done
+
