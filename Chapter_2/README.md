@@ -10,9 +10,13 @@ Run SLURM job that does the following: Runs tntblast over all -d files in the fo
 
 ```
 wget https://github.com/jgans/thermonucleotideBLAST/archive/refs/tags/v2.61.tar.gz
-sbatch Pul_tntblast.sl # run SLURM job
+sbatch 1_tntblast.sl # run SLURM job
 ```
 
-
 ### 2) BLASTn subject query
-Modify the script accordingly for different species.
+Identify sequences of closely related strains or species, for each gene region. Modify the script accordingly for different species.
+
+```
+# Put reference sequences of each gene region into dir "Target_gene_regions/reference_seq"
+sbatch 2_blastn_subject.sl # run SLURM job
+```
