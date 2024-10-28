@@ -14,3 +14,4 @@ pankmer adj-matrix -i outPpoFastqretrim/ -o PpoFastqRetrim.csv
 pankmer clustermap -i PpoFastqRetrim-24.csv -o PpoFastqRetrim_heatmap.svg --width 14 --height 14 --dend-ratio 0.35 --colormap viridis
 pankmer collect -i outPpoFastqretrim/ -o PpoFastqRetrim_heatmap_collect.svg
 pankmer count -i outPpoFastqretrim/
+
