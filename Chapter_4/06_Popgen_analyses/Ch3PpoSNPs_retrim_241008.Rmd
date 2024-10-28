@@ -1,0 +1,1620 @@
+---
+title: "Ch3HypTesting"
+author: "DH"
+date: "2024-07-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/01_initial_data_exploration/vcf-snpset")
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+Set Java directory
+```{r}
+Sys.setenv(JAVA_HOME='C:/Program Files/Java/jre1.8.0_361') # for 64-bit version
+```
+
+
+# Install and load libraries
+```{r}
+install.packages("vegan")
+install.packages("readr")
+install.packages("geosphere")
+install.packages("tidyverse")
+install.packages("pheatmap")
+install.packages("vcfR")
+install.packages("adegenet")
+install.packages("pegas")
+install.packages("poppr")
+install.packages("BiocManager")
+BiocManager::install("SeqArray")
+devtools::install_github("thierrygosselin/radiator")
+BiocManager::install('SNPRelate')
+devtools::install_github("arleyc/PCAtest")
+```
+
+```{r}
+library(devtools)
+library(vegan)
+library(readr)
+library(geosphere)
+library(ggplot2)
+library(viridis)
+library(tidyverse)
+library(reshape2)
+library(pheatmap)
+library(vcfR)
+library(adegenet)
+library(pegas)
+library(poppr)
+library(SeqArray)
+library(radiator)
+library(SNPRelate)
+library(PCAtest)
+```
+# Ppo whole genome alignment SNP calling
+## Variant quality
+```{r}
+var_qual <- read_delim("./out.lqual", delim = "\t",
+           col_names = c("chr", "pos", "qual"), skip = 1)
+
+a <- ggplot(var_qual, aes(qual)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3) +   xlim(0, 80)
+a + theme_light()
+```
+Mean depth
+```{r}
+var_depth <- read_delim("./out.ldepth.mean", delim = "\t",
+           col_names = c("chr", "pos", "mean_depth", "var_depth"), skip = 1)
+
+# Clean the data: remove non-finite values in the mean_depth column
+var_depth_clean <- var_depth[is.finite(var_depth$mean_depth) & var_depth$mean_depth >= 0 & var_depth$mean_depth <= 50, ]
+
+a <- ggplot(var_depth, aes(mean_depth)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)  +   xlim(0, 8)
+a + theme_light()
+
+summary(var_depth$mean_depth)
+
+```
+
+Variant missingness
+```{r}
+var_miss <- read_delim("./out.lmiss", delim = "\t",
+                       col_names = c("chr", "pos", "nchr", "nfiltered", "nmiss", "fmiss"), skip = 1)
+
+a <- ggplot(var_miss, aes(fmiss)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+
+summary(var_miss$fmiss)
+```
+Minor allele frequency
+```{r}
+var_freq <- read_delim("./out.frq", delim = "\t",
+                       col_names = c("chr", "pos", "nalleles", "nchr", "a1", "a2"), skip = 1)
+
+# find minor allele frequency
+var_freq$maf <- var_freq %>% select(a1, a2) %>% apply(1, function(z) min(z))
+
+a <- ggplot(var_freq, aes(maf)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+
+summary(var_freq$maf)
+```
+Mean depth per individual is comparable
+```{r}
+ind_depth <- read_delim("./out.idepth", delim = "\t",
+                        col_names = c("ind", "nsites", "depth"), skip = 1)
+
+a <- ggplot(ind_depth, aes(depth)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+```
+
+Proportion of missing data per individual
+```{r}
+ind_miss  <- read_delim("./out.imiss", delim = "\t",
+                        col_names = c("ind", "ndata", "nfiltered", "nmiss", "fmiss"), skip = 1)
+
+a <- ggplot(ind_miss, aes(fmiss)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+```
+
+Heterozygosity and inbreeding coefficient per individual
+```{r}
+ind_het <- read_delim("./out.het", delim = "\t",
+           col_names = c("ind","ho", "he", "nsites", "f"), skip = 1)
+
+a <- ggplot(ind_het, aes(f)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+```
+
+
+```{r}
+r2 <- GWLD:::LD(geno012, cores = 3)
+mi <- MI(geno012, cores = 3)
+RMI <- RMI(geno012, cores = 3)
+# value <- GWLD(geno012, method = "RMI", cores = 3)
+
+# Calculate the decay from result
+rmi_decay <- decay(RMI, Info)
+
+ggplot(data = rmi_decay, aes(x = dist / 1000, y = mean)) +
+  geom_point(size = 0.8) +
+  geom_line(linewidth = 0.5) +
+  theme_bw() +
+  labs(x = "Physical distance/ Kb", y = NULL) +
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_text(size = 15),
+    axis.text = element_text(size = 14),
+    legend.text = element_text(size = 15, hjust = 0),
+    legend.title = element_blank(),
+    legend.key = element_blank(),
+    legend.position = c(.90, .85),
+    legend.background = element_blank()
+  ) +
+  scale_x_continuous(limits = c(0, 300), expand = c(0, 5), breaks = seq(0, 300, 20))
+```
+
+
+# PCA
+```{r}
+# read in data
+pca <- read_table("./cichlids.eigenvec", col_names = FALSE)
+eigenval <- scan("./cichlids.eigenval")
+
+# sort out the pca data
+# remove nuisance column
+pca <- pca[,-1]
+# set names
+names(pca)[1] <- "ind"
+names(pca)[2:ncol(pca)] <- paste0("PC", 1:(ncol(pca)-1))
+
+# Function to extract the substring between the last _ and the .
+extract_substring <- function(x) {
+  sub(".*_(.*)\\..*", "\\1", x)
+}
+
+# Apply the function to pca$ind
+pca$ind <- sapply(pca$ind, extract_substring)
+
+# Display the modified pca$ind
+print(pca$ind)
+```
+
+```{r}
+# sort out the individual species and pops
+# spp
+spp <- rep(NA, length(pca$ind))
+spp[grep("PunPund", pca$ind)] <- "pundamilia"
+spp[grep("PunNyer", pca$ind)] <- "nyererei"
+# location
+loc <- rep(NA, length(pca$ind))
+loc[grep("Mak", pca$ind)] <- "makobe"
+loc[grep("Pyt", pca$ind)] <- "python"
+# combine - if you want to plot each in different colours
+spp_loc <- paste0(spp, "_", loc)
+
+# remake data.frame
+pca <- as.tibble(data.frame(pca, spp, loc, spp_loc))
+```
+
+
+Plotting PCA
+```{r}
+# first convert to percentage variance explained
+pve <- data.frame(PC = 1:20, pve = eigenval/sum(eigenval)*100)
+
+# make plot
+a <- ggplot(pve, aes(PC, pve)) + geom_bar(stat = "identity")
+a + ylab("Percentage variance explained") + theme_light()
+
+# calculate the cumulative sum of the percentage variance explained
+cumsum(pve$pve)
+```
+
+
+Actual PCA plot
+```{r}
+# plot pca
+b <- ggplot(pca, aes(PC1, PC2)) + geom_point(size = 3)
+b <- b + scale_colour_manual(values = c("red", "blue"))
+b <- b + coord_equal() + theme_light()
+b <- b + geom_text(aes(label = pca$ind), vjust = -0.5, hjust = 0.5)  # Adjust vjust and hjust for label position
+b + xlab(paste0("PC1 (", signif(pve$pve[1], 3), "%)")) + ylab(paste0("PC2 (", signif(pve$pve[2], 3), "%)"))
+```
+
+### Heatmap
+```{r}
+df_plink <- read_table("plink.genome")
+
+# Function to extract the substring between the last _ and the .
+extract_substring <- function(x) {
+  sub(".*_(.*)\\..*", "\\1", x)
+}
+
+# Apply the function to pca$ind
+df_plink$FID1 <- sapply(df_plink$FID1, extract_substring)
+df_plink$FID2 <- sapply(df_plink$FID2, extract_substring)
+df_plink$IID1 <- sapply(df_plink$IID1, extract_substring)
+df_plink$IID2 <- sapply(df_plink$IID2, extract_substring)
+
+# Display the modified pca$ind
+#print(df_plink$FID1)
+
+#convert long-to-wide
+x <- dcast(df_plink, IID1 ~ IID2, value.var = "PI_HAT")
+
+# convert to matrix with column AND rownames
+myM <- as.matrix(x[ , -1 ])
+row.names(myM) <- x$IID1
+
+# I am converting all NAs to 0, reconsider if this is suitable in your case.
+myM[ is.na(myM) ] <- 0
+
+#then plot
+heatmap(myM, )
+```
+
+Ppo whole genome assemblies MDS plot from plink
+```{r}
+plink_mds <- read_table("plink.mds")
+
+plink_mds$FID <- sapply(plink_mds$FID, extract_substring)
+plink_mds$IID <- sapply(plink_mds$IID, extract_substring)
+
+plot(plink_mds$C1, plink_mds$C2)
+
+# Add sample labels to the points
+text(plink_mds$C1, plink_mds$C2, labels = plink_mds$FID, pos = 4, cex = 0.7, col = "blue")
+```
+
+### Ppo Heatmap from plink
+```{r}
+mibs <- read_table("plink.mibs", col_names = F)
+mibs <- mibs[, -30]
+mibs <- as.matrix(mibs)
+
+sample_labels <- plink_mds$FID
+
+head(mibs)
+
+# Generate the heatmap
+
+
+PpoSNPs_heatmap <- pheatmap(mibs, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_labels,  # Label the rows
+         labels_col = sample_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "PpoSNPs_heatmap.png", plot = PpoSNPs_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+
+# Ppo FastQ
+
+Ppo FastQ MDS plot from plink  -variantFilter default filtering
+```{r}
+PpoFastq_mds <- read_table("PpoFastq.mds")
+
+# Function to extract the substring between the last / and the first _
+extract_substring_slash_underscore <- function(x) {
+  sub(".*/([^_/]+)_.*", "\\1", x)
+}
+
+PpoFastq_mds$FID <- sapply(PpoFastq_mds$FID, extract_substring_slash_underscore)
+PpoFastq_mds$IID <- sapply(PpoFastq_mds$IID, extract_substring_slash_underscore)
+
+plot(PpoFastq_mds$C1, PpoFastq_mds$C2)
+# Add sample labels to the points
+text(PpoFastq_mds$C1, PpoFastq_mds$C2, labels = PpoFastq_mds$FID, pos = 4, cex = 0.7, col = "blue")
+```
+
+Ppo FastQ MDS plot from plink - vcftools refiltered
+```{r}
+ppoFASTQ_vcffilter_mds <- read_table("./PpoFastQ_vcfQC/ppoFASTQ_vcffilter.mds")
+
+ppoFASTQ_vcffilter_mds$FID <- sapply(ppoFASTQ_vcffilter_mds$FID, extract_substring_slash_underscore)
+ppoFASTQ_vcffilter_mds$IID <- sapply(ppoFASTQ_vcffilter_mds$IID, extract_substring_slash_underscore)
+
+plot(ppoFASTQ_vcffilter_mds$C1, ppoFASTQ_vcffilter_mds$C2)
+# Add sample labels to the points
+text(ppoFASTQ_vcffilter_mds$C1, ppoFASTQ_vcffilter_mds$C2, labels = ppoFASTQ_vcffilter_mds$FID, pos = 4, cex = 0.7, col = "blue")
+```
+
+### Ppo FastQ Heatmap from plink
+```{r}
+PpoFastq_mibs <- read_table("PpoFastq.mibs", col_names = F)
+PpoFastq_mibs <- PpoFastq_mibs[, -29]
+PpoFastq_mibs <- as.matrix(PpoFastq_mibs)
+
+sample_labels <- PpoFastq_mds$FID
+
+head(PpoFastq_mibs)
+
+# Generate the heatmap
+
+
+PpoFastQ_SNPs_heatmap <- pheatmap(PpoFastq_mibs, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_labels,  # Label the rows
+         labels_col = sample_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "PpoFastQ_SNPs_heatmap.png", plot = PpoFastQ_SNPs_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+### Ppo FastQ Heatmap from plink - raw, unfiltered, just PLINK pruned
+```{r}
+ppoFASTQ_raw <- read_table("./PpoFastQ_vcfQC/ppoFASTQ_raw.mibs", col_names = F)
+ppoFASTQ_raw <- ppoFASTQ_raw[, -29]
+ppoFASTQ_raw <- as.matrix(ppoFASTQ_raw)
+
+sample_labels <- PpoFastq_mds$FID
+
+head(ppoFASTQ_raw)
+
+# Generate the heatmap
+
+
+PpoFastQ_SNPs_heatmap_refiltered <- pheatmap(ppoFASTQ_raw, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_labels,  # Label the rows
+         labels_col = sample_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "PpoSNPs_heatmap_FastQ_raw.png", plot = PpoFastQ_SNPs_heatmap_refiltered, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+### Ppo FastQ Heatmap from plink - vcftools refiltered
+```{r}
+ppoFASTQ_vcffilter_mibs <- read_table("./PpoFastQ_vcfQC/ppoFASTQ_vcffilter.mibs", col_names = F)
+ppoFASTQ_vcffilter_mibs <- ppoFASTQ_vcffilter_mibs[, -29]
+ppoFASTQ_vcffilter_mibs <- as.matrix(ppoFASTQ_vcffilter_mibs)
+
+sample_labels <- PpoFastq_mds$FID
+
+head(ppoFASTQ_vcffilter_mibs)
+
+# Generate the heatmap
+
+
+PpoFastQ_SNPs_heatmap_refiltered <- pheatmap(ppoFASTQ_vcffilter_mibs, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_labels,  # Label the rows
+         labels_col = sample_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "PpoSNPs_heatmap_FastQ_refiltered.png", plot = PpoFastQ_SNPs_heatmap_refiltered, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+### Variant quality
+```{r}
+var_qual <- read_delim("./PpoFastQ_vcfQC/out.lqual", delim = "\t",
+           col_names = c("chr", "pos", "qual"), skip = 1)
+
+a <- ggplot(var_qual, aes(qual)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3) +   xlim(0, 1000)
+a + theme_light()
+```
+
+Mean depth
+```{r}
+var_depth <- read_delim("./PpoFastQ_vcfQC/out.ldepth.mean", delim = "\t",
+           col_names = c("chr", "pos", "mean_depth", "var_depth"), skip = 1)
+
+# Clean the data: remove non-finite values in the mean_depth column
+var_depth_clean <- var_depth[is.finite(var_depth$mean_depth) & var_depth$mean_depth >= 0 & var_depth$mean_depth <= 50, ]
+
+a <- ggplot(var_depth, aes(mean_depth)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)  +   xlim(0, 100)
+a + theme_light()
+
+summary(var_depth$mean_depth)
+
+```
+
+Variant missingness
+```{r}
+var_miss <- read_delim("./PpoFastQ_vcfQC/out.lmiss", delim = "\t",
+                       col_names = c("chr", "pos", "nchr", "nfiltered", "nmiss", "fmiss"), skip = 1)
+
+a <- ggplot(var_miss, aes(fmiss)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+
+summary(var_miss$fmiss)
+```
+Minor allele frequency
+```{r}
+var_freq <- read_delim("./PpoFastQ_vcfQC/out.frq", delim = "\t",
+                       col_names = c("chr", "pos", "nalleles", "nchr", "a1", "a2"), skip = 1)
+
+# find minor allele frequency
+var_freq$maf <- var_freq %>% select(a1, a2) %>% apply(1, function(z) min(z))
+
+a <- ggplot(var_freq, aes(maf)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+
+summary(var_freq$maf)
+```
+Mean depth per individual is comparable
+```{r}
+ind_depth <- read_delim("./PpoFastQ_vcfQC/out.idepth", delim = "\t",
+                        col_names = c("ind", "nsites", "depth"), skip = 1)
+
+a <- ggplot(ind_depth, aes(depth)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+```
+
+Proportion of missing data per individual
+```{r}
+ind_miss  <- read_delim("./PpoFastQ_vcfQC/out.imiss", delim = "\t",
+                        col_names = c("ind", "ndata", "nfiltered", "nmiss", "fmiss"), skip = 1)
+
+a <- ggplot(ind_miss, aes(fmiss)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+```
+
+Heterozygosity and inbreeding coefficient per individual
+```{r}
+ind_het <- read_delim("./PpoFastQ_vcfQC/out.het", delim = "\t",
+           col_names = c("ind","ho", "he", "nsites", "f"), skip = 1)
+
+a <- ggplot(ind_het, aes(f)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+```
+# Ppo FastQ SNPset against haploid noragtag DH641 ref
+
+Ppo FastQ MDS plot from plink  -variantFilter default filtering 
+```{r}
+PpoFastq_hap_mds <- read_table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/ppq_hapnorag_variantFilter.mds")
+
+# Function to extract the substring between the last / and the first _
+extract_substring_slash_underscore <- function(x) {
+  sub(".*/([^_/]+)_.*", "\\1", x)
+}
+
+PpoFastq_hap_mds$FID <- sapply(PpoFastq_hap_mds$FID, extract_substring_slash_underscore)
+PpoFastq_hap_mds$IID <- sapply(PpoFastq_hap_mds$IID, extract_substring_slash_underscore)
+
+plot(PpoFastq_hap_mds$C1, PpoFastq_hap_mds$C2)
+# Add sample labels to the points
+text(PpoFastq_hap_mds$C1, PpoFastq_hap_mds$C2, labels = PpoFastq_hap_mds$FID, pos = 4, cex = 0.7, col = "blue")
+```
+
+Ppo FastQ MDS plot from plink - vcftools refiltered
+```{r}
+ppoFASTQ_hap_Vcffilter_mds <- read_table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/snpeff/coding_regions_only.mds")
+
+ppoFASTQ_hap_Vcffilter_mds$FID <- sapply(ppoFASTQ_hap_Vcffilter_mds$FID, extract_substring_slash_underscore)
+ppoFASTQ_hap_Vcffilter_mds$IID <- sapply(ppoFASTQ_hap_Vcffilter_mds$IID, extract_substring_slash_underscore)
+
+plot(ppoFASTQ_hap_Vcffilter_mds$C1, ppoFASTQ_hap_Vcffilter_mds$C2)
+# Add sample labels to the points
+text(ppoFASTQ_hap_Vcffilter_mds$C1, ppoFASTQ_hap_Vcffilter_mds$C2, labels = ppoFASTQ_hap_Vcffilter_mds$FID, pos = 4, cex = 0.7, col = "blue")
+```
+
+### Ppo FastQ Heatmap from plink
+```{r}
+PpoFastq_hap_mibs <- read_table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/snpeff/coding_regions_only.mibs", col_names = F)
+PpoFastq_hap_mibs <- PpoFastq_hap_mibs[, -29]
+PpoFastq_hap_mibs <- as.matrix(PpoFastq_hap_mibs)
+
+sample_labels <- PpoFastq_hap_mds$FID
+
+head(PpoFastq_hap_mibs)
+
+# Generate the heatmap
+
+
+PpoFastQ_SNPs_heatmap <- pheatmap(PpoFastq_hap_mibs, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_labels,  # Label the rows
+         labels_col = sample_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "PpoFastQ_SNPs_hapnorag_coding_heatmap.png", plot = PpoFastQ_SNPs_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+### Ppo FastQ Heatmap from plink - vcftools refiltered
+```{r}
+ppoFASTQ_hap_Vcffilter_mibs <- read_table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/ppq_hapnorag_vcfFilter.mibs", col_names = F)
+ppoFASTQ_hap_Vcffilter_mibs <- ppoFASTQ_hap_Vcffilter_mibs[, -29]
+ppoFASTQ_hap_Vcffilter_mibs <- as.matrix(ppoFASTQ_hap_Vcffilter_mibs)
+
+sample_labels <- PpoFastq_hap_mds$FID
+
+head(ppoFASTQ_hap_Vcffilter_mibs)
+
+# Generate the heatmap
+
+
+PpoFastQ_SNPs_heatmap_refiltered <- pheatmap(ppoFASTQ_hap_Vcffilter_mibs, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_labels,  # Label the rows
+         labels_col = sample_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "PpoFastQ_SNPs_hapnorag_heatmap_refiltered.png", plot = PpoFastQ_SNPs_heatmap_refiltered, width = 9, height = 8, dpi = 200, bg = "white")
+```
+### Function to generate SNP subset heatmaps
+```{r}
+generate_heatmap <- function(mibs_file, sample_labels) {
+  # Read the .mibs file
+  mibs_data <- read_table(mibs_file, col_names = FALSE)
+  
+  # Remove the last column if necessary (adjust this based on your specific data)
+  mibs_data <- mibs_data[, -ncol(mibs_data)]
+  
+  # Convert to matrix
+  mibs_matrix <- as.matrix(mibs_data)
+  
+  # Generate the heatmap
+  heatmap_plot <- pheatmap(mibs_matrix, 
+                           cluster_rows = TRUE, 
+                           cluster_cols = TRUE, 
+                           color = viridis(256),  # Use viridis color palette
+                           labels_row = sample_labels,  # Label the rows
+                           labels_col = sample_labels,  # Label the columns
+                           show_rownames = TRUE, 
+                           show_colnames = TRUE, 
+                           legend = TRUE,  # Add legend
+                           border_color = NA,
+                           main = basename(mibs_file))  # Remove border color
+  
+  # Create a filename based on the input file
+  output_file <- sub("\\.mibs$", "_heatmap.png", basename(mibs_file))
+  
+  # Save the plot to a file
+  ggsave(filename = output_file, plot = heatmap_plot, width = 9, height = 8, dpi = 200, bg = "white")
+  
+  # Return the plot object (optional)
+  return(heatmap_plot)
+}
+
+# Example usage:
+# Assuming sample_labels is a vector of labels for your samples:
+# sample_labels <- c("Sample1", "Sample2", ..., "SampleN")
+
+# generate_heatmap("path_to_your_file.mibs", sample_labels)
+```
+
+Running function to generate gene region specific heatmaps
+```{r}
+setwd("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/snpeff/")
+
+# Get a list of all .mibs files in the current directory
+mibs_files <- list.files(pattern = "\\.mibs$")
+
+
+# Loop through each .mibs file and generate the heatmap
+for (mibs_file in mibs_files) {
+  generate_heatmap(mibs_file, sample_labels)
+}
+
+```
+
+
+### Variant quality
+```{r}
+var_qual <- read_delim("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/vcftools/out.lqual", delim = "\t",
+           col_names = c("chr", "pos", "qual"), skip = 1)
+
+a <- ggplot(var_qual, aes(qual)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3) +   xlim(0, 1000)
+a + theme_light()
+```
+
+Mean depth
+```{r}
+var_depth <- read_delim("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/vcftools/out.ldepth.mean", delim = "\t",
+           col_names = c("chr", "pos", "mean_depth", "var_depth"), skip = 1)
+
+# Clean the data: remove non-finite values in the mean_depth column
+var_depth_clean <- var_depth[is.finite(var_depth$mean_depth) & var_depth$mean_depth >= 0 & var_depth$mean_depth <= 50, ]
+
+a <- ggplot(var_depth, aes(mean_depth)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)  +   xlim(0, 150)
+a + theme_light()
+
+summary(var_depth$mean_depth)
+
+```
+
+Variant missingness
+```{r}
+var_miss <- read_delim("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/vcftools/out.lmiss", delim = "\t",
+                       col_names = c("chr", "pos", "nchr", "nfiltered", "nmiss", "fmiss"), skip = 1)
+
+a <- ggplot(var_miss, aes(fmiss)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+
+summary(var_miss$fmiss)
+```
+Minor allele frequency
+```{r}
+var_freq <- read_delim("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/vcftools/out.frq", delim = "\t",
+                       col_names = c("chr", "pos", "nalleles", "nchr", "a1", "a2"), skip = 1)
+
+# find minor allele frequency
+var_freq$maf <- var_freq %>% select(a1, a2) %>% apply(1, function(z) min(z))
+
+a <- ggplot(var_freq, aes(maf)) + geom_density(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+
+summary(var_freq$maf)
+```
+Mean depth per individual is comparable
+```{r}
+ind_depth <- read_delim("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/vcftools/out.idepth", delim = "\t",
+                        col_names = c("ind", "nsites", "depth"), skip = 1)
+
+a <- ggplot(ind_depth, aes(depth)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+```
+
+Proportion of missing data per individual
+```{r}
+ind_miss  <- read_delim("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/vcftools/out.imiss", delim = "\t",
+                        col_names = c("ind", "ndata", "nfiltered", "nmiss", "fmiss"), skip = 1)
+
+a <- ggplot(ind_miss, aes(fmiss)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+```
+
+Heterozygosity and inbreeding coefficient per individual
+```{r}
+ind_het <- read_delim("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/vcftools/out.het", delim = "\t",
+           col_names = c("ind","ho", "he", "nsites", "f"), skip = 1)
+
+a <- ggplot(ind_het, aes(f)) + geom_histogram(fill = "dodgerblue1", colour = "black", alpha = 0.3)
+a + theme_light()
+```
+# Ppo retrimmed FastQ dup removed no MAF no missing
+
+### Ppo FastQ MDS plot from plink  
+```{r}
+PpoRetrim_mds <- read_table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/plink.mds")
+
+# Function to extract the substring between the last / and the first _
+extract_substring_slash_underscore <- function(x) {
+  sub(".*/([^_/]+)_.*", "\\1", x)
+}
+
+PpoRetrim_mds$FID <- sapply(PpoRetrim_mds$FID, extract_substring_slash_underscore)
+PpoRetrim_mds$IID <- sapply(PpoRetrim_mds$IID, extract_substring_slash_underscore)
+
+plot(PpoRetrim_mds$C1, PpoRetrim_mds$C2)
+# Add sample labels to the points
+text(PpoRetrim_mds$C1, PpoRetrim_mds$C2, labels = PpoRetrim_mds$FID, pos = 4, cex = 0.7, col = "blue")
+```
+### Ppo FastQ Heatmap from plink
+```{r}
+PpoRetrim_mibs <- read_table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/plink_bcffiltered.mibs", col_names = F)
+PpoRetrim_mibs <- PpoRetrim_mibs[, -29]
+PpoRetrim_mibs <- as.matrix(PpoRetrim_mibs)
+
+sample_labels <- PpoRetrim_mds$FID
+
+head(PpoRetrim_mibs)
+
+# Generate the heatmap
+
+
+PpoFastQ_SNPs_heatmap <- pheatmap(PpoRetrim_mibs, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_labels,  # Label the rows
+         labels_col = sample_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "PpoFastQ_SNPs_retrim_BCF_heatmap.png", plot = PpoFastQ_SNPs_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+# Ppo SNPs called from Whole Genome assemblies
+### Ppo fasta Heatmap from plink
+```{r}
+PpoWG_SNPS_mibs <- read_table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/plink.mibs", col_names = F)
+PpoWG_SNPS_mibs <- PpoWG_SNPS_mibs[, -29]
+PpoWG_SNPS_mibs <- as.matrix(PpoWG_SNPS_mibs)
+
+head(PpoWG_SNPS_mibs)
+
+# Generate the heatmap
+
+
+PpoFastQ_SNPs_heatmap <- pheatmap(PpoWG_SNPS_mibs, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_ids,  # Label the rows
+         labels_col = sample_ids,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "PpoWG_SNPs_96%_heatmap.png", plot = PpoFastQ_SNPs_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+
+# All NZ Pleurotus
+
+MDS plot from plink
+```{r}
+Pleu_mds <- read_table("pleurotusNZ.mds")
+
+extract_substring_slash <- function(x) {
+  sub(".*/(.*?)\\..*", "\\1", x)
+}
+
+
+Pleu_mds$FID <- sapply(Pleu_mds$FID, extract_substring_slash)
+Pleu_mds$IID <- sapply(Pleu_mds$IID, extract_substring_slash)
+
+# Plot the points
+plot(Pleu_mds$C1, Pleu_mds$C2, xlab = "C1", ylab = "C2", main = "MDS Plot")
+
+# Add sample labels to the points
+text(Pleu_mds$C1, Pleu_mds$C2, labels = Pleu_mds$FID, pos = 4, cex = 0.7, col = "blue")
+```
+
+### Heatmap
+```{r}
+Pleu_mibs <- read_table("pleurotusNZ.mibs", col_names = F)
+Pleu_mibs <- Pleu_mibs[, -59]
+Pleu_mibs <- as.matrix(Pleu_mibs)
+
+sample_labels <- Pleu_mds$FID
+
+head(Pleu_mibs)
+
+# Generate the heatmap
+
+
+PleuSNPs_heatmap <- pheatmap(Pleu_mibs, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_labels,  # Label the rows
+         labels_col = sample_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA,
+         fontsize = 6)  # Remove border color
+
+ggsave(filename = "PleuSNPs_heatmap.png", plot = PleuSNPs_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+# Clone correction, poppr
+Load, explore and filter data with radiator
+```{r}
+setwd("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/")
+
+radiator::summary_strata("my.strata.tsv")
+
+mystrata <- read_strata("my.strata.tsv")
+
+Ppo_data <- radiator::filter_rad(
+    data = "ppoFASTQ_retrim.bed",
+    strata = "my.strata.tsv",
+    output = c("genind"), parallel.core = 1L, filename = "PpoFiltered",
+    )
+
+# Read in data from last step
+
+```
+
+Clone correction in poppr
+```{r}
+# Convert the radiator output to a genind object
+genind_obj <- Ppo_data$output$genind
+
+# info table
+info_table(genind_obj, plot = TRUE)
+
+#Removing uninformative loci
+informed <- informloci(genind_obj, cutoff = 2/nInd(genind_obj), MAF = 0.001, quiet = FALSE)
+
+genclone_obj <- as.genclone(genind_obj)
+
+# clone correction
+Ppo_clonecorrected <- clonecorrect(genind_obj, strata = 1)
+```
+
+
+```{r}
+# Load the VCF file using pegas
+vcfPeg <- read.vcf("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/vcffiltered_SNPs.vcf.gz")
+
+gentest <- import2genind("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/vcffiltered_SNPs.vcf.gz")
+
+head(vcfPeg)
+
+# Convert to genind object
+SNPset10k <- loci2genind(vcfPeg)
+
+head(SNPset10k)
+
+# Read vcf file using vcfR
+vcfRfile <- read.vcfR("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/vcffiltered_SNPs.vcf.gz", verbose = FALSE)
+genlight_obj <- vcfR2genlight(vcfRfile)
+head(genlight_obj)
+head(vcfRfile)
+
+genind_vcfR <- vcfR2genind(vcfRfile)
+head(genind_vcfR)
+
+# Testing out SNPclone
+gl <- as.snpclone(genlight_obj)
+ploidy(gl) <- 2 # enforce the ploidy
+strata(gl) <- as.data.frame(read_tsv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/my.strata.pop.tsv")) # set the strata
+setPop(gl) <- ~POPULATION # set the population (from the strata)
+mlg.filter(gl) <- 0.12 + .Machine$double.eps^0.5 # filter to collapse clones with a maximum distance of 0.05% changes. Change this to whatever suits your needs.
+
+# Filter stats of mlg
+filter_stats(
+  x = gl,
+  distance = bitwise.dist, plot = TRUE)
+
+# Calculate pairwise distances between samples
+xdis <- bitwise.dist(gl)
+
+plot.phylo(upgma(xdis))
+
+poppr.msn(gl, xdis, gadj = 15, vertex.label = "inds")
+```
+
+### Nei's distance matrix
+```{r}
+# Calculate Nei's genetic distance
+nei_dist <- nei.dist(ArthursPass_vcf_80.gid)
+
+# View the distance matrix
+print(nei_dist)
+
+### Heatmap 
+
+#Nei
+nei_dist_matrix <- as.matrix(nei_dist)
+
+
+head(PpoRetrim_mibs)
+
+# Generate the heatmap
+
+
+PpoFastQ_SNPs_heatmap <- pheatmap(PpoRetrim_mibs, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_labels,  # Label the rows
+         labels_col = sample_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "PpoFastQ_SNPs_retrim_nei2_heatmap.png", plot = PpoFastQ_SNPs_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+### AMOVA on 3 a priori populations
+```{r}
+amova_result <- poppr.amova(gl, ~POPULATION)
+
+amova_result
+
+amova.test <- randtest(amova_result) # Test for significance
+plot(amova.test)
+amova.test
+
+#poppr_table <- poppr(genclone_obj)
+```
+### AMOVA on 2 a priori populations (ICMP9630 removed)
+```{r}
+#snpclone_subset <- gl[-28, ]
+
+amova_result <- poppr.amova(snpclone_subset, ~POPULATION)
+
+amova_result_27 <- amova_result
+
+amova.test_27 <- randtest(amova_result_27, nrepet = 999) # Test for significance
+plot(amova.test_27)
+amova.test_27
+
+#poppr_table <- poppr(genclone_obj)
+```
+
+
+```{r}
+setwd("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/")
+# Convert bed file to genind
+snpset <- genomic_converter(
+                   data = genlight_obj,
+                   output = c("genind"))
+
+#Get the content of the object created using:
+names(snpset)
+#To isolate the genlight object (without imputation):
+snpset_genind  <- snpset$genind
+```
+
+
+# PCA with genlight for 80% SNPset
+```{r}
+vcf_80 <- read.vcfR("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/variants_snpeff_1k_WG_80.vcf", verbose = FALSE)
+vcfR:::write.vcf(vcf_80, "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/shared_snps_80p_exported.vcf")
+
+
+# Analysis packages tend to convert files to their own formats so we will use can interpret easily.
+# We will use a “genlight” format, which is good for storing variant call data. 
+vcf_80.gl <- vcfR2genlight(vcf_80)
+
+# Load strata
+strata(vcf_80.gl) <- as.data.frame(read_tsv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/my.strata_locations.tsv"))
+pop(vcf_80.gl) <- vcf_80.gl@strata$Location
+
+# Calculate PCA
+vcf_80.pca <- glPca(vcf_80.gl, nf = 10)
+vcf_80.pca
+```
+
+### PCA for 80%
+```{r}
+# convert scores of vcf_80.pca into a tibble
+vcf_80.pca.scores <- as_tibble(vcf_80.pca$scores)
+
+# add the country data into a column of vcf_80.pca.scores tibble
+vcf_80.pca.scores$site <- pop(vcf_80.gl)
+
+# We will also determine the variance each PC contributes the data, which will help us understand potential drivers of patterns in our dataset. Lets plot the eigenvectors to try an understand this a bit more.
+
+barplot(100 * vcf_80.pca$eig / sum(vcf_80.pca$eig), col="green")
+title(ylab = "Percent of variance explained") 
+title(xlab = "Eigenvalues")
+
+# Lets extract the variance associated with the top 4 PCs, so we can use them in our plots.
+
+# first we sum all the eigenvalues
+eig.total <- sum(vcf_80.pca$eig)
+
+# sum the variance
+PC1.variance <- formatC(head(vcf_80.pca$eig)[1]/eig.total * 100)
+PC2.variance <- formatC(head(vcf_80.pca$eig)[2]/eig.total * 100)
+PC3.variance <- formatC(head(vcf_80.pca$eig)[3]/eig.total * 100)
+PC4.variance <- formatC(head(vcf_80.pca$eig)[4]/eig.total * 100)
+
+xlabel <- paste0("PC1 variance = ",PC1.variance,"%")
+ylabel <- paste0("PC2 variance = ", PC2.variance, "%")
+plot12 <- ggplot(vcf_80.pca.scores, aes(PC1, PC2, color = site)) + 
+  geom_point() + 
+  #geom_text(aes(label = sample_ids), vjust = -0.5, hjust = 0.5) +  
+  scale_color_viridis(discrete = TRUE, end = 0.6, option = "H") +
+  labs(x = xlabel, y = ylabel)
+
+plot12
+
+
+```
+### Subset to Arthur's Pass only from genlight
+```{r}
+# Subset the genlight object to only include samples from Arthur's Pass and Craigieburn
+sample_valleys <- as.data.frame(read_tsv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/my.strata_valleys.tsv"))
+sample_valleys_only <- sample_valleys$POPULATION
+#subset_vcf_80 <- vcf_80.gl[vcf_80.gl@pop %in% c("ArthursPass", "Craigieburn")]
+subset_vcf_80 <- subset_vcf_80[!subset_vcf_80@ind.names %in% c("ICMP17077_Tongariro", "ICMP22498_BealeyValley", "DH640_Edwards8b")]
+
+# Subset sample IDs
+sample_ids_AP <- sample_ids[c(-1, -5, -6, -23, -24, -25, -28, -27, -12)]
+
+# Calculate PCA
+subset_vcf_80.pca <- glPca(subset_vcf_80, nf = 10)
+subset_vcf_80.pca
+
+# convert scores of subset_vcf_80.pca into a tibble
+subset_vcf_80.pca.scores <- as_tibble(subset_vcf_80.pca$scores)
+
+# add the country data into a column of subset_vcf_80.pca.scores tibble
+subset_vcf_80.pca.scores$site <- sample_valleys_only[c(-1, -5, -6, -23, -24, -25, -28, -27, -12)]
+
+# We will also determine the variance each PC contributes the data, which will help us understand potential drivers of patterns in our dataset. Lets plot the eigenvectors to try an understand this a bit more.
+
+barplot(100 * subset_vcf_80.pca$eig / sum(subset_vcf_80.pca$eig), col="green")
+title(ylab = "Percent of variance explained") 
+title(xlab = "Eigenvalues")
+
+# Lets extract the variance associated with the top 4 PCs, so we can use them in our plots.
+
+# first we sum all the eigenvalues
+eig.total <- sum(subset_vcf_80.pca$eig)
+
+# sum the variance
+PC1.variance <- formatC(head(subset_vcf_80.pca$eig)[1]/eig.total * 100)
+PC2.variance <- formatC(head(subset_vcf_80.pca$eig)[2]/eig.total * 100)
+PC3.variance <- formatC(head(subset_vcf_80.pca$eig)[3]/eig.total * 100)
+PC4.variance <- formatC(head(subset_vcf_80.pca$eig)[4]/eig.total * 100)
+
+xlabel <- paste0("PC1 variance = ",PC1.variance,"%")
+ylabel <- paste0("PC2 variance = ", PC2.variance, "%")
+plot12 <- ggplot(subset_vcf_80.pca.scores, aes(PC1, PC2, color = site)) + 
+  geom_point() + 
+  geom_text(aes(label = sample_ids_AP), vjust = -0.5, hjust = 0.5) +  
+  scale_color_viridis(discrete = TRUE, end = 0.9, option = "B") +
+  labs(x = xlabel, y = ylabel)
+
+plot12
+```
+### Fresh Arthur's Pass vcf
+```{r}
+ArthursPass_vcf_80 <- read.vcfR("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/03_retrimmed/ArthursPass_snps_80p.vcf", verbose = FALSE)
+
+ArthursPass_vcf_80.gl <- vcfR2genlight(ArthursPass_vcf_80)
+ArthursPass_vcf_80.gid <- vcfR2genind(ArthursPass_vcf_80)
+
+# Load strata
+strata(ArthursPass_vcf_80.gid) <- sample_valleys[c(-1, -5, -6, -23, -24, -25, -28, -27, -12),]
+pop(ArthursPass_vcf_80.gl) <- sample_valleys_only[c(-1, -5, -6, -23, -24, -25, -28, -27, -12)]
+pop(ArthursPass_vcf_80.gid) <- sample_valleys_only[c(-1, -5, -6, -23, -24, -25, -28, -27, -12)]
+
+# Calculate PCA
+ArthursPass_vcf_80.pca <- glPca(ArthursPass_vcf_80.gl, nf = 10)
+ArthursPass_vcf_80.pca
+
+# convert scores of ArthursPass_vcf_80.pca into a tibble
+ArthursPass_vcf_80.pca.scores <- as_tibble(ArthursPass_vcf_80.pca$scores)
+
+# add the country data into a column of ArthursPass_vcf_80.pca.scores tibble
+ArthursPass_vcf_80.pca.scores$site <- sample_valleys_only[c(-1, -5, -6, -23, -24, -25, -28, -27, -12)]
+sample_ids_AP <- sample_ids[c(-1, -5, -6, -23, -24, -25, -28, -27, -12)]
+
+# We will also determine the variance each PC contributes the data, which will help us understand potential drivers of patterns in our dataset. Lets plot the eigenvectors to try an understand this a bit more.
+
+barplot(100 * ArthursPass_vcf_80.pca$eig / sum(ArthursPass_vcf_80.pca$eig), col="green")
+title(ylab = "Percent of variance explained") 
+title(xlab = "Eigenvalues")
+
+# Lets extract the variance associated with the top 4 PCs, so we can use them in our plots.
+
+# first we sum all the eigenvalues
+eig.total <- sum(ArthursPass_vcf_80.pca$eig)
+
+# sum the variance
+PC1.variance <- formatC(head(ArthursPass_vcf_80.pca$eig)[1]/eig.total * 100)
+PC2.variance <- formatC(head(ArthursPass_vcf_80.pca$eig)[2]/eig.total * 100)
+PC3.variance <- formatC(head(ArthursPass_vcf_80.pca$eig)[3]/eig.total * 100)
+PC4.variance <- formatC(head(ArthursPass_vcf_80.pca$eig)[4]/eig.total * 100)
+
+xlabel <- paste0("PC1 variance = ",PC1.variance,"%")
+ylabel <- paste0("PC2 variance = ", PC2.variance, "%")
+plot12 <- ggplot(ArthursPass_vcf_80.pca.scores, aes(PC1, PC2, color = site)) + 
+  geom_point() + 
+  geom_text(aes(label = sample_ids_AP), vjust = -0.5, hjust = 0.5) +  
+  scale_color_viridis(discrete = TRUE, end = 0.9, option = "B") +
+  labs(x = xlabel, y = ylabel)
+
+plot12
+
+# Lets quickly look at PC3/PC4, and compare to the first plot.
+
+plot34 <- ggplot(ArthursPass_vcf_80.pca.scores, aes(PC3, PC4, color = site)) + 
+    geom_point() + geom_text(aes(label = sample_ids_AP), vjust = -0.5, hjust = 0.5) +  
+  scale_color_viridis(discrete = TRUE, end = 0.9, option = "B") +
+    labs(x = paste0("PC3 variance = ", PC3.variance,"%"), y = paste0("PC4 variance = ", PC4.variance, "%"))
+plot34
+
+# Calculate the mean value of the principal components for each country. 
+# We can use this to make some labels for our plots
+means <- ArthursPass_vcf_80.pca.scores %>% group_by(site) %>% 
+  summarize(meanPC1 = mean(PC1), meanPC2 = mean(PC2),meanPC3 = mean(PC3), meanPC4 = mean(PC4))
+
+plot12 <- ggplot(ArthursPass_vcf_80.pca.scores, aes(PC1, PC2, color = site)) + 
+  geom_point() + 
+  geom_text(aes(label = sample_ids_AP), vjust = -0.5, hjust = 0.5) +  
+  scale_color_viridis(discrete = TRUE, end = 0.9, option = "B") +
+  labs(x = xlabel, y = ylabel) +
+  stat_ellipse(level = 0.95, size = 1)
+
+plot12
+```
+
+### Arthur's Pass 80% subset UPGMA tree
+```{r}
+ArthursPass_80_tree <- aboot(ArthursPass_vcf_80.gl, tree = "upgma", distance = bitwise.dist, sample = 100, showtree = T, cutoff = 50) 
+
+ArthursPass_80_poppr <- poppr(ArthursPass_vcf_80.gid)
+```
+
+
+# PopGen metrics
+
+```{r}
+# Read VCF file
+vcf <- read.vcfR("filtered_variants_vcftools.vcf.gz")
+
+# Convert VCF to a genlight object
+gl <- vcfR2genlight(vcf)
+
+# Assume your population information is in a separate metadata file or defined here
+# Here, we assign populations manually
+pop(gl) <- c(rep("pop1", 50), rep("pop2", 50))  # Adjust as necessary
+```
+
+
+### nucleotide diversity
+```{r}
+pi.all <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/metrics/Ppo_10kb_WG_80.windowed.pi",header=T)
+
+hist(pi.all$PI,br=50)
+
+boxplot(pi.all$PI,ylab="diversity")
+
+pi.sub <- subset(pi.all, CHROM == "k141_29340")
+hist(pi.sub$PI,br=10)
+
+plot(pi.sub$BIN_START,pi.sub$PI,xlab="position",ylab="diversity")
+plot(pi.all$BIN_START,pi.all$PI,xlab="position",ylab="diversity")
+```
+
+
+### Tajima's D
+```{r}
+taj.all <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/metrics/Ppo_10kb_WG_80.Tajima.D",header=T)
+
+hist(taj.all$TajimaD,br=50)
+
+taj.sub <- subset(taj.all, CHROM == "k141_29340")
+hist(taj.sub$TajimaD,br=20)
+
+plot(taj.sub$BIN_START,taj.sub$TajimaD,xlab="position",ylab="Tajima's D")
+plot(taj.all$BIN_START,taj.all$TajimaD,xlab="position",ylab="Tajima's D")
+
+# Adjust BIN_START_ADJUSTED by adding 10000 to any BIN_START that's 0, except for the first one
+taj.long <- taj.all %>%
+  mutate(group_max = cumsum(!duplicated(CHROM)) - 1) %>%  # Create group indicator
+  group_by(group_max) %>%  # Group by this new group_max column to track transitions
+  mutate(
+    # Adjust BIN_START values as before, and then apply the additional rule for 0 BIN_START values
+    BIN_START_ADJUSTED = if_else(
+      BIN_START == 0 & row_number() != 1,  # Check if BIN_START is 0 and not the first row
+      BIN_START + 10000,  # Add 10000 to BIN_START if condition is met
+      BIN_START + (max(BIN_START) * group_max)  # Otherwise, apply the existing adjustment
+    )
+  ) %>%
+  ungroup() %>%
+  select(-group_max)  # Clean up the temporary column
+
+plot(taj.long$BIN_START_ADJUSTED,taj.long$TajimaD,xlab="position",ylab="Tajima's D")
+```
+
+### Fst test
+```{r}
+# Two populations: pop1 = AP, excl Craigieburn, pop2 = rest
+fst.all <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/metrics/two_pop_FST_10kb_maskedvar.windowed.weir.fst",header=T)
+
+hist(fst.all$MEAN_FST,br=50)
+hist(fst.all$WEIGHTED_FST,br=50)
+
+fst.sub <- subset(fst.all, CHROM == "k141_29340")
+
+plot(fst.sub$BIN_START,fst.sub$MEAN_FST,xlab="position",ylab="diversity")
+plot(fst.sub$BIN_START,fst.sub$WEIGHTED_FST,xlab="position",ylab="diversity")
+
+# LOESS plot
+ggplot(fst.sub, aes(x = BIN_START, y = MEAN_FST)) +
+    geom_point(alpha = 0.5) +
+    geom_smooth(method = "loess", color = "blue", se = FALSE) +
+    labs(title = "FST Across Genomic Positions",
+         x = "Genomic Position",
+         y = "Mean FST") +
+    theme_minimal()
+
+```
+### ROH metrics 
+```{r}
+# 1. Import the filtered_roh_LD01_est.txt table
+roh_data <- read_table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/filtered_roh_LD01_est.txt", skip = 2) 
+roh_data <- roh_data[-1,]
+roh_data$`[5]End` <- as.numeric(roh_data$`[5]End`)
+
+hist(roh_data$`[5]End`, breaks = 30)
+mean(roh_data$`[5]End`)
+
+# 2. Calculate the number of generations from the ROH results
+# Recombination rate: 34 kb/cM = 34,000 bp/cM, and the formula for generations g = 1 / (2 * ROH length in Morgans)
+recomb_rate <- 35100 # 34 kb per cM
+roh_data <- roh_data %>%
+  mutate(roh_length_morgans = `[5]End` / (recomb_rate * 100), # Convert bp to Morgans
+         generations = 1 / (2 * roh_length_morgans)) # Calculate generations
+
+# 3. Shorten sample names to only the string before the second "_"
+roh_data <- roh_data %>%
+  mutate(short_sample_name = sub("^(.*?)(_.*)", "\\1", RG)) %>%  # Extract sample name before second "_" 
+  arrange(short_sample_name)  # Sort by short_sample_name
+
+roh_data$short_sample_name <- as.factor(roh_data$short_sample_name)
+levels(roh_data$short_sample_name) <- sample_ids
+
+roh_data_sorted <- roh_data[order(roh_data$generations), ]
+```
+
+### ROH plots
+```{r}
+generation_means <- roh_data %>%
+  group_by(short_sample_name) %>%
+  dplyr:::summarize(median(generations))
+
+generation_means
+
+generation_means_sorted <- generation_means[order(generation_means$`median(generations)`), ]
+generation_means_sorted$short_sample_name <- factor(generation_means_sorted$short_sample_name, 
+                                                 levels = generation_means_sorted$short_sample_name)
+
+# Calculate the percentage of values below 200
+percentage_below_200 <- sum(roh_data$generations < 200) / length(roh_data$generations) * 100
+
+percentage_below_200
+
+#Calculate FROH as the proportion of genome in ROHs for each sample
+genome_size <- 29000000 # 29 Mb in bp
+froh_data <- roh_data %>%
+  group_by(short_sample_name) %>%
+  dplyr:::summarize(total_roh_length = sum(`[5]End`),
+            FROH = total_roh_length / genome_size) # Calculate FROH
+
+roh_counts <- roh_data %>%
+  group_by(short_sample_name) %>%
+  dplyr:::summarize(roh_count = n())
+
+# Merge the ROH counts with froh_data
+froh_data <- froh_data %>%
+  left_join(roh_counts, by = "short_sample_name")
+
+froh_data$short_sample_name <- factor(froh_data$short_sample_name, 
+                                                 levels = generation_means_sorted$short_sample_name)
+
+#froh_data <- froh_data[order(froh_data$FROH), ]
+
+# Create a new column for the y-axis labels (combining sample name and ROH count)
+froh_data <- froh_data %>%
+  dplyr:::mutate(sample_with_roh_count = paste(short_sample_name, "(n =", roh_count, ")"))
+
+froh_data$sample_with_roh_count <- factor(froh_data$sample_with_roh_count, 
+                                                 levels = froh_data$sample_with_roh_count)
+
+# Now, plot using the new y-axis labels
+froh_plot <- ggplot(froh_data, aes(y = sample_with_roh_count, x = FROH)) +
+  geom_point(stat = "identity") +
+  theme_minimal() +
+  labs(y = "Sample", x = expression(italic(F)[ROH])) +
+  theme(axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+print(froh_plot)
+
+# Set the levels of roh_data$short_sample_name to match the order in froh_data_sorted$sample_with_roh_count
+roh_data$short_sample_name <- factor(roh_data$short_sample_name, 
+                                     levels = levels(generation_means_sorted$short_sample_name))
+
+# Plot box whisker plots showing the average generations for each sample with sample labels on y-axis
+avg_generations_plot <- ggplot(roh_data, aes(y = short_sample_name, x = generations)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(y = "Sample", x = "Generations") +
+  theme(axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1)) +
+  labs(y = NULL) + theme(axis.text.y = element_blank()) 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+print(avg_generations_plot)
+
+library(patchwork)
+
+# Combine the three plots using patchwork
+combined_plot <- froh_plot + avg_generations_plot + plot_layout(ncol = 2)
+
+print(combined_plot)
+
+# Save the combined plot as a PNG file
+ggsave("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/combined_plot.png", plot = combined_plot, width = 7, height = 4, dpi = 300)
+```
+
+### HWE
+```{r}
+# Read the first dataset
+hwe.WG_80 <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/metrics/WG_80_HWE.hwe", header=T)
+
+# Count number of rows in total
+total_rows_WG_80 <- nrow(hwe.WG_80)
+
+# Count number of rows where P_HWE > 0.05 (HWE true) and P_HWE < 0.05 (HWE false)
+HWE_true_WG_80 <- sum(hwe.WG_80$P_HWE > 0.05)
+HWE_false_WG_80 <- sum(hwe.WG_80$P_HWE < 0.05)
+
+# Calculate percentages
+percent_HWE_true_WG_80 <- (HWE_true_WG_80 / total_rows_WG_80) * 100
+percent_HWE_false_WG_80 <- (HWE_false_WG_80 / total_rows_WG_80) * 100
+
+# Print the results with percentages
+cat("WG_80 Dataset:\n")
+cat("Number of rows where P_HWE > 0.05 (HWE true):", HWE_true_WG_80, "(", round(percent_HWE_true_WG_80, 2), "%)\n")
+cat("Number of rows where P_HWE < 0.05 (HWE false):", HWE_false_WG_80, "(", round(percent_HWE_false_WG_80, 2), "%)\n\n")
+
+
+# Read the second dataset
+hwe.WG_all <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/metrics/WG_all_HWE.hwe", header=T)
+
+# Count number of rows in total
+total_rows_WG_all <- nrow(hwe.WG_all)
+
+# Count number of rows where P_HWE > 0.05 (HWE true) and P_HWE < 0.05 (HWE false)
+HWE_true_WG_all <- sum(hwe.WG_all$P_HWE > 0.05)
+HWE_false_WG_all <- sum(hwe.WG_all$P_HWE < 0.05)
+
+# Calculate percentages
+percent_HWE_true_WG_all <- (HWE_true_WG_all / total_rows_WG_all) * 100
+percent_HWE_false_WG_all <- (HWE_false_WG_all / total_rows_WG_all) * 100
+
+# Print the results with percentages
+cat("WG_all Dataset:\n")
+cat("Number of rows where P_HWE > 0.05 (HWE true):", HWE_true_WG_all, "(", round(percent_HWE_true_WG_all, 2), "%)\n")
+cat("Number of rows where P_HWE < 0.05 (HWE false):", HWE_false_WG_all, "(", round(percent_HWE_false_WG_all, 2), "%)\n")
+
+```
+# Looking into DH640 outlier
+```{r}
+# Identify rows where PI is greater than 0.01
+pi_above_threshold <- pi.all[pi.all$PI > 0.001, ]
+
+# Display the resulting rows
+print(pi_above_threshold)
+
+# Identify rows where TajimaD is less than -1
+tajima_below_threshold <- taj.all[taj.all$TajimaD < -1, ]
+
+# Display the resulting rows
+print(tajima_below_threshold)
+
+# so I identified this region from the reference genome as a potential area where DH640 stands out: k141_29340:139,991..179,991
+
+
+```
+```{r}
+# Load the subset VCF file
+subset_vcf <- read.vcfR("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/DH640_outlier_case/subset_region_DH640case.vcf")
+
+# Convert to a dataframe for easier handling
+vcf_df <- vcfR2tidy(subset_vcf)$fix
+
+# Filter for variants specific to DH640 if needed
+# Here we assume DH640 is one of the columns
+# Replace "DH640" with the specific column identifier for DH640 in your VCF
+dh640_variants <- vcf_df %>%
+  filter(!is.na(DH640_Edwards8b)) %>% # Select rows where DH640 has variant data
+  select(CHROM, POS, REF, ALT, everything())
+
+# Print summary
+print(dh640_variants)
+```
+
+```{r}
+# Load the allele frequency data into R
+dh640_freq <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/DH640_outlier_case/dh640_freq.frq", header = TRUE, row.names = NULL)
+other_samples_freq <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/DH640_outlier_case/other_samples_freq.frq", header = TRUE, row.names = NULL)
+
+# Merge the two datasets by position for comparison
+freq_comparison <- merge(dh640_freq, other_samples_freq, by = c("CHROM"))
+
+# Convert allele frequency columns from character to numeric
+freq_comparison$FREQ_DH640 <- as.numeric(sub(".*:", "", freq_comparison$X.ALLELE.FREQ..x))
+freq_comparison$FREQ_Others <- as.numeric(sub(".*:", "", freq_comparison$X.ALLELE.FREQ..y))
+
+ggplot(freq_comparison, aes(x = CHROM)) +
+  geom_line(aes(y = FREQ_DH640, color = "DH640")) +
+  geom_line(aes(y = FREQ_Others, color = "Other Samples")) +
+  labs(title = "Allele Frequency Comparison in Region k141_29340:139991-179991",
+       x = "Position", y = "Allele Frequency",
+       color = "Sample") +
+  theme_minimal()
+```
+```{r}
+# R code to load and compare the allele frequencies of each sample
+
+# Load the allele frequency data into R
+dh640_freq <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/DH640_outlier_case/dh640_freq.frq", header = TRUE, row.names = NULL)
+dh703_casey1_freq <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/DH640_outlier_case/DH703_Casey1_freq.frq", header = TRUE, row.names = NULL)
+dh704_casey2_freq <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/DH640_outlier_case/DH704_Casey2_freq.frq", header = TRUE, row.names = NULL)
+icmp9630_fiordland_freq <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/DH640_outlier_case/ICMP9630_Fiordland_freq.frq", header = TRUE, row.names = NULL)
+dh639_edwards8a_freq <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/DH640_outlier_case/DH639_Edwards8a_freq.frq", header = TRUE, row.names = NULL)
+dh1310_temple_freq <- read.table("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/04_WG_SNPs/DH640_outlier_case/DH1310_Temple_freq.frq", header = TRUE, row.names = NULL)
+
+# Merge the datasets by chromosome for comparison
+freq_comparison <- merge(dh640_freq, dh703_casey1_freq, by = "CHROM", suffixes = c("_DH640", "_DH703_Casey1"))
+freq_comparison <- merge(freq_comparison, dh704_casey2_freq, by = "CHROM", suffixes = c("", "_DH704_Casey2"))
+freq_comparison <- merge(freq_comparison, icmp9630_fiordland_freq, by = "CHROM", suffixes = c("", "_ICMP9630_Fiordland"))
+freq_comparison <- merge(freq_comparison, dh639_edwards8a_freq, by = "CHROM", suffixes = c("", "_DH639_Edwards8a"))
+freq_comparison <- merge(freq_comparison, dh1310_temple_freq, by = "CHROM", suffixes = c("", "_DH1310_Temple"))
+
+# Convert allele frequency columns from character to numeric
+freq_comparison$FREQ_DH640 <- as.numeric(sub(".*:", "", freq_comparison$X.ALLELE.FREQ..DH640))
+freq_comparison$FREQ_DH703_Casey1 <- as.numeric(sub(".*:", "", freq_comparison$X.ALLELE.FREQ..DH703_Casey1))
+freq_comparison$FREQ_DH704_Casey2 <- as.numeric(sub(".*:", "", freq_comparison$X.ALLELE.FREQ..DH704_Casey2))
+freq_comparison$FREQ_ICMP9630_Fiordland <- as.numeric(sub(".*:", "", freq_comparison$X.ALLELE.FREQ..ICMP9630_Fiordland))
+freq_comparison$FREQ_DH639_Edwards8a <- as.numeric(sub(".*:", "", freq_comparison$X.ALLELE.FREQ..DH639_Edwards8a))
+freq_comparison$FREQ_DH1310_Temple <- as.numeric(sub(".*:", "", freq_comparison$X.ALLELE.FREQ..DH1310_Temple))
+
+
+ggplot(freq_comparison, aes(x = CHROM)) +
+  geom_line(aes(y = FREQ_DH640, color = "DH640")) +
+  geom_line(aes(y = FREQ_DH703_Casey1, color = "DH703_Casey1")) +
+  geom_line(aes(y = FREQ_DH704_Casey2, color = "DH704_Casey2")) +
+  geom_line(aes(y = FREQ_ICMP9630_Fiordland, color = "ICMP9630_Fiordland")) +
+  geom_line(aes(y = FREQ_DH639_Edwards8a, color = "DH639_Edwards8a")) +
+  geom_line(aes(y = FREQ_DH1310_Temple, color = "DH1310_Temple")) +
+  labs(title = "Allele Frequency Comparison in Region k141_29340:139991-179991",
+       x = "Position", y = "Allele Frequency",
+       color = "Sample") +
+  theme_minimal()
+
+# Remove unnecessary columns after merging
+freq_comparison_clean <- freq_comparison %>%
+  select(CHROM, starts_with("X.ALLELE.FREQ."))
+
+# Rename the columns for easier plotting
+colnames(freq_comparison_clean) <- c("CHROM", "FREQ_DH640", "FREQ_DH703_Casey1", 
+                                     "FREQ_DH704_Casey2", "FREQ_ICMP9630_Fiordland",
+                                     "FREQ_DH639_Edwards8a", "FREQ_DH1310_Temple")
+
+# Convert allele frequency columns from character to numeric
+freq_comparison_clean$FREQ_DH640 <- as.numeric(sub(".*:", "", freq_comparison_clean$FREQ_DH640))
+freq_comparison_clean$FREQ_DH703_Casey1 <- as.numeric(sub(".*:", "", freq_comparison_clean$FREQ_DH703_Casey1))
+freq_comparison_clean$FREQ_DH704_Casey2 <- as.numeric(sub(".*:", "", freq_comparison_clean$FREQ_DH704_Casey2))
+freq_comparison_clean$FREQ_ICMP9630_Fiordland <- as.numeric(sub(".*:", "", freq_comparison_clean$FREQ_ICMP9630_Fiordland))
+freq_comparison_clean$FREQ_DH639_Edwards8a <- as.numeric(sub(".*:", "", freq_comparison_clean$FREQ_DH639_Edwards8a))
+freq_comparison_clean$FREQ_DH1310_Temple <- as.numeric(sub(".*:", "", freq_comparison_clean$FREQ_DH1310_Temple))
+
+# Plot allele frequency differences
+library(ggplot2)
+
+ggplot(freq_comparison_clean, aes(x = CHROM)) +
+  geom_line(aes(y = FREQ_DH640, color = "DH640")) +
+  geom_line(aes(y = FREQ_DH703_Casey1, color = "DH703_Casey1")) +
+  geom_line(aes(y = FREQ_DH704_Casey2, color = "DH704_Casey2")) +
+  geom_line(aes(y = FREQ_ICMP9630_Fiordland, color = "ICMP9630_Fiordland")) +
+  geom_line(aes(y = FREQ_DH639_Edwards8a, color = "DH639_Edwards8a")) +
+  geom_line(aes(y = FREQ_DH1310_Temple, color = "DH1310_Temple")) +
+  labs(title = "Allele Frequency Comparison by Chromosome",
+       x = "Chromosome", y = "Average Allele Frequency",
+       color = "Sample") +
+  theme_minimal()
+
+```
+
+
+# SNPs annotated - diploid
+```{r}
+#SNPs_with_annotations.df <- read.delim("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/DH641_diploid_annotated_SNPs.tsv")
+
+# Add a new column 'upstream' that is TRUE if POS < start, otherwise FALSE
+SNPs_with_annotations_upstream.df <- SNPs_with_annotations.df %>%
+  mutate(upstream = POS < start)
+
+# Print the first few rows to verify the result
+head(SNPs_with_annotations_upstream.df)
+
+# Create a logical table of SAMPLE by feature
+sample_feature_table <- SNPs_with_annotations_upstream.df %>%
+  select(SAMPLE, feature) %>%
+  distinct() %>%  # Keep unique SAMPLE-feature pairs
+  mutate(value = TRUE) %>%  # Create a logical TRUE value for existing pairs
+  pivot_wider(names_from = feature, values_from = value, values_fill = FALSE) # Spread features across columns
+
+sample_feature_table <- SNPs_with_annotations_upstream.df %>%
+  select(SAMPLE, feature, upstream) %>%
+  distinct() %>%  # Keep unique SAMPLE-feature pairs along with upstream
+  mutate(value = TRUE) %>%  # Create a logical TRUE value for existing pairs
+  pivot_wider(names_from = feature, values_from = value, values_fill = FALSE) %>% # Spread features across columns
+  group_by(SAMPLE) %>%
+  mutate(upstream = any(upstream == TRUE)) %>%  # Add the 'upstream' column for each SAMPLE
+  ungroup()
+
+# Count the number of times CDS is TRUE or FALSE when upstream is FALSE
+cds_upstream_false <- sample_feature_table %>%
+  filter(upstream == FALSE) %>%
+  summarize(CDS_within = sum(CDS == TRUE, na.rm = TRUE),
+            noncoding_within = sum(CDS == FALSE, na.rm = TRUE))
+
+# Count the number of times CDS is TRUE or FALSE when upstream is TRUE
+cds_upstream_true <- sample_feature_table %>%
+  filter(upstream == TRUE) %>%
+  summarize(CDS_upstream = sum(CDS == TRUE, na.rm = TRUE),
+            noncoding_usptream = sum(CDS == FALSE, na.rm = TRUE))
+
+# Combine the counts into a single table
+cds_summary <- bind_cols(cds_upstream_false, cds_upstream_true)
+cds_summary <- t(cds_summary)
+
+# Print the resulting table
+print(cds_summary)
+```
+
+# SNPs annotated - haploid
+```{r}
+#SNPs_with_annotations.df <- read.delim("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/02_Ppo_popgen/SNPs_haploid_noragtag/DH641_haploid_annotated_SNPs.tsv")
+
+# Add a new column 'upstream' that is TRUE if POS < start, otherwise FALSE
+SNPs_with_annotations_upstream.df <- SNPs_with_annotations.df %>%
+  mutate(upstream = POS < start)
+
+# Print the first few rows to verify the result
+head(SNPs_with_annotations_upstream.df)
+
+# Create a logical table of SAMPLE by feature
+sample_feature_table <- SNPs_with_annotations_upstream.df %>%
+  select(SAMPLE, feature) %>%
+  distinct() %>%  # Keep unique SAMPLE-feature pairs
+  mutate(value = TRUE) %>%  # Create a logical TRUE value for existing pairs
+  pivot_wider(names_from = feature, values_from = value, values_fill = FALSE) # Spread features across columns
+
+sample_feature_table <- SNPs_with_annotations_upstream.df %>%
+  select(SAMPLE, feature, upstream) %>%
+  distinct() %>%  # Keep unique SAMPLE-feature pairs along with upstream
+  mutate(value = TRUE) %>%  # Create a logical TRUE value for existing pairs
+  pivot_wider(names_from = feature, values_from = value, values_fill = FALSE) %>% # Spread features across columns
+  group_by(SAMPLE) %>%
+  mutate(upstream = any(upstream == TRUE)) %>%  # Add the 'upstream' column for each SAMPLE
+  ungroup()
+
+# Count the number of times CDS is TRUE or FALSE when upstream is FALSE
+cds_upstream_false <- sample_feature_table %>%
+  filter(upstream == FALSE) %>%
+  summarize(CDS_within = sum(CDS == TRUE, na.rm = TRUE),
+            noncoding_within = sum(CDS == FALSE, na.rm = TRUE))
+
+# Count the number of times CDS is TRUE or FALSE when upstream is TRUE
+cds_upstream_true <- sample_feature_table %>%
+  filter(upstream == TRUE) %>%
+  summarize(CDS_upstream = sum(CDS == TRUE, na.rm = TRUE),
+            noncoding_usptream = sum(CDS == FALSE, na.rm = TRUE))
+
+# Combine the counts into a single table
+cds_summary <- bind_cols(cds_upstream_false, cds_upstream_true)
+cds_summary <- t(cds_summary)
+
+# Print the resulting table
+print(cds_summary)
+```

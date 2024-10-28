@@ -1,0 +1,1945 @@
+---
+title: "Ch3HypTesting"
+author: "DH"
+date: "2024-07-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/07_matA_cassette")
+```
+
+Set Java directory
+```{r}
+Sys.setenv(JAVA_HOME='C:/Program Files/Java/jre1.8.0_361') # for 64-bit version
+```
+
+
+# Install and load libraries
+```{r}
+install.packages("vegan")
+install.packages("readr")
+install.packages("geosphere")
+install.packages("mpmcorrelogram")
+install.packages("seqinr")
+install.packages("dartR")
+install_github("jgx65/hierfstat")
+install.packages("dendextend")
+```
+
+```{r}
+library(vegan)
+library(readr)
+library(geosphere)
+library(ggplot2)
+library(viridis)
+if (!requireNamespace("ecodist", quietly = TRUE)) {
+  install.packages("ecodist")
+}
+library(ecodist)
+library(mpmcorrelogram)
+library(adegenet)
+library(pegas)
+library(ape)
+library(poppr)
+library(seqinr)
+library(dartR)
+library("hierfstat")
+library(mmod)
+library(dendextend)
+
+```
+
+# Import matA and HD1 alignment 
+```{r}
+matA_alignment <- read.alignment("Ppo_matA_only_Ppo_alignment_clinker.fasta", format = "fasta")
+HD1_alignment <- read.alignment("Ppo_HD1_only_Ppo_alignment.fasta", format = "fasta")
+matA_alignmentDNAbin <- read.dna("Ppo_matA_only_Ppo_alignment_clinker.fasta", format = "fasta")
+HD1_alignmentDNAbin <- read.dna("Ppo_HD1_only_Ppo_alignment.fasta", format = "fasta")
+```
+
+# Import labels and distance
+```{r}
+# Load the Ppo coords
+Ppo_coords_cassette <- read_csv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/01_initial_data_exploration/pankmer/Ppo_Coordinates.csv")
+
+sample_ids_29 <- Ppo_coords_cassette$ID
+
+# Assign the new names to the DNAbin object
+matA_alignment$nam <- sample_ids_29
+HD1_alignment$nam <- sample_ids_29
+
+# Calculate the geographic distance matrix
+geo_dist_pankmer <- distm(Ppo_coords[, c("longitude", "latitude")], fun = distHaversine)
+
+# Sample population details
+sample_valleys <- as.data.frame(read_tsv("my.strata_valleys.tsv"))
+sample_valleys_only <- sample_valleys$POPULATION
+
+sample_loc_coarse <- as.data.frame(read_tsv("my.strata_locations_coarse.tsv"))
+sample_loc_coarse_pop <- sample_loc_coarse$POPULATION
+
+AP_pops <- c("Craigieburn", "Klondyke", "Edwards", "Casey", "Hawdon", "Bealey")
+
+matA_genind_obj <- alignment2genind(matA_alignment)
+pop(matA_genind_obj) <- sample_loc_coarse_pop
+strata(matA_genind_obj) <- sample_loc_coarse
+matA_genind_obj_AP <- matA_genind_obj
+pop(matA_genind_obj_AP) <- sample_valleys_only
+strata(matA_genind_obj_AP) <- sample_valleys
+
+HD1_genind_obj <- alignment2genind(HD1_alignment)
+pop(HD1_genind_obj) <- sample_loc_coarse_pop
+HD1_genind_obj_AP <- HD1_genind_obj
+pop(HD1_genind_obj_AP) <- sample_valleys_only
+strata(HD1_genind_obj_AP) <- sample_valleys
+```
+
+# PCA
+```{r}
+pca_res <- dudi.pca(tab(matA_genind_obj, NA.method = "mean"), scannf = FALSE, nf = 2)
+plot(pca_res$li)
+```
+
+# dapc 
+```{r}
+# from https://grunwaldlab.github.io/Population_Genetics_in_R/DAPC.html
+dapc.coarse<- dapc(matA_genind_obj, var.contrib = TRUE, scale = FALSE, n.pca = nPop(matA_genind_obj) - 1, n.da = nPop(matA_genind_obj) - 1)
+scatter(dapc.coarse, scree.pca=TRUE, scree.da=TRUE, cell = 4, pch = 19, cstar = 1, mstree = TRUE, lwd = 1, lty = 1, clabel = 0, legend=TRUE)
+contrib <- loadingplot(dapc.coarse$var.contr, axis = 2, thres = 0.004, lab.jitter = 1)
+
+# All sampels fine locations
+dapc.fine<- dapc(matA_genind_obj_AP, var.contrib = TRUE, scale = FALSE, n.pca = nPop(matA_genind_obj_AP) - 1, n.da = nPop(matA_genind_obj_AP) - 1)
+scatter(dapc.fine, scree.pca=TRUE, scree.da=TRUE, cell = 1, pch = 19, cstar = 1, mstree = TRUE, lwd = 1, lty = 1, clabel = 1, legend=F)
+contrib <- loadingplot(dapc.fine$var.contr, axis = 2, thres = 0.004, lab.jitter = 1)
+
+# Arthurs Pass fine
+subset_genind <- matA_genind_obj_AP[pop(matA_genind_obj_AP) %in% AP_pops, ]
+dapc.APfine <- dapc(subset_genind, var.contrib = TRUE, scale = FALSE, n.pca = nPop(subset_genind) - 1, n.da = nPop(subset_genind) - 1)
+scatter(dapc.APfine, scree.pca=TRUE, scree.da=TRUE, cell = 4, pch = 19, cstar = 1, mstree = TRUE, lwd = 1, lty = 1, clabel = 0, legend=TRUE)
+contrib <- loadingplot(dapc.APfine$var.contr, axis = 2, thres = 0.009, lab.jitter = 1)
+```
+## DAPC alelle details
+```{r}
+temp    <- seploc(matA_genind_obj_AP)       # seploc {adegenet} creates a list of individual loci.
+snp906  <- tab(temp[["6844"]]) # tab {adegenet} returns a matrix of genotypes
+snp399  <- tab(temp[["6947"]])
+snp6770  <- tab(temp[["6770"]])
+
+# The following two commands find the average allele frequencies per population
+(freq906 <- apply(snp906, 2, function(e) tapply(e, pop(matA_genind_obj_AP), mean, na.rm = TRUE)))
+(freq399 <- apply(snp399, 2, function(e) tapply(e, pop(matA_genind_obj_AP), mean, na.rm = TRUE)))
+(freq6770 <- apply(snp6770, 2, function(e) tapply(e, pop(matA_genind_obj_AP), mean, na.rm = TRUE)))
+```
+# DAPC cross
+```{r}
+pramx <- xvalDapc(tab(matA_genind_obj_AP, NA.method = "mean"), pop(matA_genind_obj_AP))
+```
+# Locus table stats
+```{r}
+loci_AP <- locus_table(matA_genind_obj_AP)
+filtered_loci <- informloci(matA_genind_obj_AP)
+nLoc(filtered_loci)
+stats_filtered_fine <- poppr(filtered_loci)
+stats_fine <- poppr(matA_genind_obj_AP)
+stats_coarse <- poppr(matA_genind_obj)
+```
+# Find clusters
+```{r}
+mat_AP_clusters <- find.clusters(matA_genind_obj_AP, max.n.clust = 27)
+
+MXtree <- bruvo.boot(MX, replen = pinfreps, cutoff = 50, quiet = TRUE)
+```
+# Distance tree
+```{r}
+matA_tree <- aboot(matA_genind_obj_AP, distance = "provesti.dist")
+#HD1_tree <- aboot(HD1_genind_obj_AP, distance = "provesti.dist")
+
+matA_tree
+HD1_tree
+```
+# Tajima's D and pi
+```{r}
+window_size <- 1000
+step_size <- 500
+
+num_windows <- (ncol(matA_alignmentDNAbin) - window_size) / step_size
+tajima_d_values <- numeric(num_windows)
+pi_values <- numeric(num_windows)
+
+for (i in 1:num_windows) {
+    start <- (i - 1) * step_size + 1
+    end <- start + window_size - 1
+    window <- matA_alignmentDNAbin[, start:end]
+    tajima_d_values[i] <- tajima.test(window)$D
+    pi_values[i] <- nuc.div(window)
+}
+
+# Tajima's D plot
+plot(tajima_d_values, type = "b", xlab = "Sequence position - 1000bp windows", 
+     ylab = "Tajima's D", main = "Tajima's D Sliding Window Analysis")
+
+# Nucleotide diversity (pi) plot
+plot(pi_values, type = "b", xlab = "Sequence position - 1000bp windows", 
+     ylab = "Nucleotide Diversity (pi)", main = "Nucleotide Diversity Sliding Window Analysis")
+
+```
+## Segregating sites
+```{r}
+# use sapply to loop
+ss <- sapply(2:29, function(z){
+  length(seg.sites(matA_alignmentDNAbin[1:z, ]))
+})
+
+# plot figure
+plot(2:29, ss, col = "red", xlab = "No of sequences", ylab = "Segregating sites", las = 1)
+
+## Nucleotide diversity by number of sequences
+# use sapply to loop
+nd <- sapply(2:29, function(z){
+  nuc.div(matA_alignmentDNAbin[1:z, ])
+})
+
+# plot figure
+plot(2:29, nd, col = "blue", xlab = "No of sequences", ylab = expression(pi), las = 1)
+```
+
+
+# PCA Poppr matA
+```{r}
+matA_genlight_obj_AP <- gi2gl(subset_genind)
+
+# Calculate PCA
+ArthursPass_vcf_80.pca <- glPca(matA_genlight_obj_AP, nf = 10, scale = FALSE)
+ArthursPass_vcf_80.pca
+
+# convert scores of ArthursPass_vcf_80.pca into a tibble
+ArthursPass_vcf_80.pca.scores <- as_tibble(ArthursPass_vcf_80.pca$scores)
+
+# add the country data into a column of ArthursPass_vcf_80.pca.scores tibble
+ArthursPass_vcf_80.pca.scores$site <- sample_valleys_only
+
+# We will also determine the variance each PC contributes the data, which will help us understand potential drivers of patterns in our dataset. Lets plot the eigenvectors to try an understand this a bit more.
+
+eigenplot <- barplot(100 * ArthursPass_vcf_80.pca$eig / sum(ArthursPass_vcf_80.pca$eig), col="green")
+#eigenplot <- title(main = paste(basename_vcf, " - Eigenvalues"))  # Add VCF file basename in the title
+eigenplot <- title(ylab = "Percent of variance explained") 
+eigenplot <- title(xlab = "Eigenvalues")
+eigenplot
+
+# Lets extract the variance associated with the top 4 PCs, so we can use them in our plots.
+
+# first we sum all the eigenvalues
+eig.total <- sum(ArthursPass_vcf_80.pca$eig)
+
+# sum the variance
+PC1.variance <- formatC(head(ArthursPass_vcf_80.pca$eig)[1]/eig.total * 100)
+PC2.variance <- formatC(head(ArthursPass_vcf_80.pca$eig)[2]/eig.total * 100)
+PC3.variance <- formatC(head(ArthursPass_vcf_80.pca$eig)[3]/eig.total * 100)
+PC4.variance <- formatC(head(ArthursPass_vcf_80.pca$eig)[4]/eig.total * 100)
+
+xlabel <- paste0("PC1 variance = ",PC1.variance,"%")
+ylabel <- paste0("PC2 variance = ", PC2.variance, "%")
+
+plot12 <- ggplot(ArthursPass_vcf_80.pca.scores, aes(PC1, PC2, color = site)) + 
+  geom_point() + 
+  geom_text(aes(label = sample_valleys_only), vjust = -0.5, hjust = 0.5) +  
+  scale_color_viridis(discrete = TRUE, end = 0.9, option = "B") +
+  labs(x = xlabel, y = ylabel, title = ("PC1 vs PC2"))
+
+plot12
+
+# Lets quickly look at PC3/PC4, and compare to the first plot.
+
+plot34 <- ggplot(ArthursPass_vcf_80.pca.scores, aes(PC3, PC4, color = site)) + 
+    geom_point() + geom_text(aes(label = sample_valleys_only), vjust = -0.5, hjust = 0.5) +  
+  scale_color_viridis(discrete = TRUE, end = 0.9, option = "B") +
+    labs(x = paste0("PC3 variance = ", PC3.variance,"%"), y = paste0("PC4 variance = ", PC4.variance, "%"), 
+       title = ("PC3 vs PC4"))
+plot34
+
+# Calculate the mean value of the principal components for each country. 
+# We can use this to make some labels for our plots
+means <- ArthursPass_vcf_80.pca.scores %>% group_by(site) %>% 
+  summarize(meanPC1 = mean(PC1), meanPC2 = mean(PC2),meanPC3 = mean(PC3), meanPC4 = mean(PC4))
+
+plot12ellipse <- ggplot(ArthursPass_vcf_80.pca.scores, aes(PC1, PC2, color = site)) + 
+  geom_point() + 
+  geom_text(aes(label = sample_valleys_only), vjust = -0.5, hjust = 0.5) +  
+  scale_color_viridis(discrete = TRUE, end = 0.9, option = "B") +
+  labs(x = xlabel, y = ylabel, title = ("- PC1 vs PC2 (Ellipse)")) +
+  stat_ellipse(level = 0.95, size = 1)
+
+plot12ellipse
+
+plot34ellipse <- ggplot(ArthursPass_vcf_80.pca.scores, aes(PC3, PC4, color = site)) + 
+    geom_point() + geom_text(aes(label = sample_valleys_only), vjust = -0.5, hjust = 0.5) +  
+  scale_color_viridis(discrete = TRUE, end = 0.9, option = "B") +
+    labs(x = paste0("PC3 variance = ", PC3.variance,"%"), y = paste0("PC4 variance = ", PC4.variance, "%"), 
+       title = ("PC3 vs PC4")) +
+  stat_ellipse(level = 0.95, size = 1)
+plot34ellipse
+```
+# Fst and Nm - fixation and gene flow
+```{r}
+#matA_hierfstat_AP <- genind2hierfstat(matA_genind_obj_AP)
+
+# Calculate pairwise Fst between populations
+fst_pairwse_matrix <- pairwise.WCfst(matA_hierfstat_AP, diploid=FALSE)
+
+head(fst_pairwse_matrix)
+
+# Gene flow (Nm) can be calculated similarly as before
+Nm <- (1 - fst_values$FST) / (4 * fst_values$FST)
+Nm
+```
+
+
+# AMOVA
+```{r}
+amova_result <- poppr.amova(matA_genind_obj, ~POPULATION, within = FALSE)
+amova_result
+amova_text <- capture.output(print(amova_result))
+#amovaGrob <- grid.text(paste(amova_text, collapse = "\n"), x = 0.1, y = 0.9, just = "left", gp = gpar(fontsize = 8), check.overlap=TRUE)
+amova.test <- randtest(amova_result, nrepet = 999) # Test for significance
+plot(amova.test)
+```
+
+
+# Mantel test
+```{r}
+# Perform the Mantel test
+mantel_result <- vegan:::mantel(kmer_dist, geo_dist_pankmer, method = "spearman", permutations = 9999)
+
+# Print the Mantel test result
+print(mantel_result)
+```
+
+
+Plot pankmer
+```{r}
+# Convert matrices to vectors and remove diagonal
+geo_vector <- geo_dist_pankmer[lower.tri(geo_dist_pankmer)]
+geno_vector <- kmer_dist[lower.tri(kmer_dist)]
+
+# Plot
+plot(geo_vector, geno_vector,
+     xlab = "Geographic Distance",
+     ylab = "Genomic Distance",
+     main = "Scatter Plot of Geographic vs. Genomic Distances",
+     pch = 19, col = "blue",)
+     #ylim = c(0.16,0.2))
+```
+
+Avg pairwise distances
+```{r}
+# Calculate average distances for each sample
+avg_geo_dist <- rowMeans(geo_dist_pankmer)
+avg_geno_dist <- rowMeans(kmer_dist)
+
+# Create a data frame for plotting
+data <- data.frame(Sample = sample_ids_pankmer,
+                   Avg_Geo_Distance = avg_geo_dist,
+                   Avg_Geno_Similarity = avg_geno_dist)
+
+# Plot
+ggplot(data, aes(x = Avg_Geo_Distance, y = Avg_Geno_Similarity, label = Sample)) +
+  geom_point(color = "blue", size = 3) +
+  geom_text(vjust = -0.5, hjust = 0.5, size = 3) +
+  labs(x = "Average Geographic Distance", y = "Average Genomic Similarity", 
+       title = "Average Distances per Sample") #+ xlim(0, 300000)
+  theme_minimal()
+```
+
+# Distance heatmap
+```{r}
+# Calculate Nei's genetic distance
+prevosti.dist <- prevosti.dist(matA_genind_obj_AP)
+prevosti.dist_matrix <- as.matrix(prevosti.dist)
+
+prevosti.dist_heatmap <- pheatmap(prevosti.dist_matrix, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = rev(viridis(256)),  # Use viridis color palette
+         labels_row = sample_ids_29,  # Label the rows
+         labels_col = sample_valleys_only,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+        main = ("- Prevosti's distance"),
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+```
+
+
+
+# Ppo matA
+## Import data etc
+```{r}
+# Load the k-mer distance matrix
+kmer_dist <- as.matrix(read_csv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/01_initial_data_exploration/pankmer/Ppo_matA_alignment_dist.csv", col_names = TRUE))
+kmer_dist <- as.matrix(read_csv("Ppo_HD1_protein_dist.csv", col_names = TRUE))
+
+kmer_dist <- kmer_dist[,-1]
+
+# Replace '.' with ',' and ensure the matrix remains in character format
+kmer_dist_clean <- apply(kmer_dist, 2, function(x) gsub("\\.", ",", x))
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist_clean, 2, function(x) as.numeric(gsub(",", ".", x)))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 1
+
+# Multiply by 100 to convert to percentages
+matA_dist <- 1 - (kmer_dist_numeric / 100)
+
+
+# Generate a vector with sample IDs from column names
+#sample_ids_pankmer <- colnames(kmer_dist)
+
+# Load the Ppo coords
+#Ppo_coords <- read_csv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/01_initial_data_exploration/pankmer/Ppo_Coordinates.csv")
+
+# Calculate the distance matrix
+#geo_dist_pankmer <- distm(Ppo_coords[, c("longitude", "latitude")], fun = distHaversine)
+
+# Ensure the matrices are symmetrical and of the same size
+#kmer_dist <- as.dist(kmer_dist)
+#geo_dist_pankmer <- as.dist(geo_dist_pankmer)
+
+# Perform the Mantel test
+mantel_result <- vegan:::mantel(matA_dist, geo_dist_pankmer, method = "spearman", permutations = 9999)
+mantel_result <- vegan:::mantel(matA_dist, geo_dist, method = "spearman", permutations = 9999)
+
+# Print the Mantel test result
+print(mantel_result)
+
+```
+Plot pankmer
+```{r}
+# Convert matrices to vectors and remove diagonal
+geo_vector <- geo_dist_pankmer[lower.tri(geo_dist_pankmer)]
+geno_vector <- matA_dist[lower.tri(matA_dist)]
+
+# Plot
+plot(geo_vector, geno_vector,
+     xlab = "Geographic Distance",
+     ylab = "Genomic Distance",
+     main = "Scatter Plot of Geographic vs. Genomic Distances",
+     pch = 19, col = "blue",)
+     #ylim = c(0.3,0.8))
+```
+
+Avg pairwise distances
+```{r}
+# Calculate average distances for each sample
+avg_geo_dist <- rowMeans(geo_dist_pankmer)
+avg_geno_dist <- rowMeans(matA_dist)
+
+# Create a data frame for plotting
+data <- data.frame(Sample = sample_ids_pankmer,
+                   Avg_Geo_Distance = avg_geo_dist,
+                   Avg_Geno_Similarity = avg_geno_dist)
+
+# Plot
+ggplot(data, aes(x = Avg_Geo_Distance, y = Avg_Geno_Similarity, label = Sample)) +
+  geom_point(color = "blue", size = 3) +
+  geom_text(vjust = -0.5, hjust = 0.5, size = 3) +
+  labs(x = "Average Geographic Distance", y = "Average Genomic Similarity", 
+       title = "Average Distances per Sample") # + xlim(45000, 60000)
+  theme_minimal()
+```
+
+# Ppo HD1 DNA sequences
+## Import data etc
+```{r}
+# Load the k-mer distance matrix
+kmer_dist <- as.matrix(read_csv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/01_initial_data_exploration/pankmer/Ppo_HD1_alignment_dist.csv", col_names = TRUE))
+
+kmer_dist <- kmer_dist[,-1]
+
+# Replace '.' with ',' and ensure the matrix remains in character format
+kmer_dist_clean <- apply(kmer_dist, 2, function(x) gsub("\\.", ",", x))
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist_clean, 2, function(x) as.numeric(gsub(",", ".", x)))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 1
+
+# Multiply by 100 to convert to percentages
+HD1_dist <- 1 - (kmer_dist_numeric / 100)
+
+
+# Generate a vector with sample IDs from column names
+#sample_ids_pankmer <- colnames(kmer_dist)
+
+# Load the Ppo coords
+#Ppo_coords <- read_csv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/01_initial_data_exploration/pankmer/Ppo_Coordinates.csv")
+
+# Calculate the distance matrix
+#geo_dist_pankmer <- distm(Ppo_coords[, c("longitude", "latitude")], fun = distHaversine)
+
+# Ensure the matrices are symmetrical and of the same size
+#kmer_dist <- as.dist(kmer_dist)
+#geo_dist_pankmer <- as.dist(geo_dist_pankmer)
+
+# Perform the Mantel test
+mantel_result <- vegan:::mantel(HD1_dist, geo_dist_pankmer, method = "spearman", permutations = 9999)
+
+# Print the Mantel test result
+print(mantel_result)
+
+```
+Plot pankmer
+```{r}
+# Convert matrices to vectors and remove diagonal
+geo_vector <- geo_dist_pankmer[lower.tri(geo_dist_pankmer)]
+geno_vector <- HD1_dist[lower.tri(HD1_dist)]
+
+# Plot
+plot(geo_vector, geno_vector,
+     xlab = "Geographic Distance",
+     ylab = "Genomic Distance",
+     main = "Scatter Plot of Geographic vs. Genomic Distances",
+     pch = 19, col = "blue",)
+     #ylim = c(0.4,0.6))
+```
+
+Avg pairwise distances
+```{r}
+# Calculate average distances for each sample
+avg_geo_dist <- rowMeans(geo_dist_pankmer)
+avg_geno_dist <- rowMeans(HD1_dist)
+
+# Create a data frame for plotting
+data <- data.frame(Sample = sample_ids_pankmer,
+                   Avg_Geo_Distance = avg_geo_dist,
+                   Avg_Geno_Similarity = avg_geno_dist)
+
+# Plot
+ggplot(data, aes(x = Avg_Geo_Distance, y = Avg_Geno_Similarity, label = Sample)) +
+  geom_point(color = "blue", size = 3) +
+  geom_text(vjust = -0.5, hjust = 0.5, size = 3) +
+  labs(x = "Average Geographic Distance", y = "Average Genomic Similarity", 
+       title = "Average Distances per Sample") + xlim(45000, 60000)
+  theme_minimal()
+```
+
+
+# Ppo HD1 protein sequences
+## Import data etc
+```{r}
+# Load the k-mer distance matrix
+kmer_dist <- as.matrix(read_csv("Ppo_HD1_protein_dist_exonerate_2n.csv", col_names = TRUE))
+HD1_diploid_labels <- kmer_dist[,1]
+kmer_dist <- kmer_dist[,-1]
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist, 2, function(x) as.numeric(x))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 100
+
+# Multiply by 100 to convert to percentages
+HD1_prot_dist <- 1 - (kmer_dist_numeric / 100)
+
+
+# Generate a vector with sample IDs from column names
+#sample_ids_pankmer <- colnames(kmer_dist)
+
+# Load the Ppo coords
+#Ppo_coords <- read_csv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/01_initial_data_exploration/pankmer/Ppo_Coordinates.csv")
+
+# Calculate the distance matrix
+#geo_dist_pankmer <- distm(Ppo_coords[, c("longitude", "latitude")], fun = distHaversine)
+
+# Ensure the matrices are symmetrical and of the same size
+#kmer_dist <- as.dist(kmer_dist)
+#geo_dist_pankmer <- as.dist(geo_dist_pankmer)
+
+# Perform the Mantel test
+mantel_result <- vegan:::mantel(HD1_prot_dist, geo_dist, method = "spearman", permutations = 9999)
+
+# Print the Mantel test result
+print(mantel_result)
+
+```
+
+
+## Number of unique alleles
+```{r}
+hist(HD1_prot_dist, xlim = c(0, 0.1), breaks = 200)
+
+# Create a logical matrix where TRUE indicates values between 0 and 0.1 (excluding 0)
+logical_matrix <- HD1_prot_dist > 0 & HD1_prot_dist < 0.1
+
+# Count the number of columns where there is at least one TRUE (i.e., at least one value between 0 and 0.1)
+columns_with_values_in_range <- colSums(logical_matrix) > 0
+
+# Count the number of such columns
+num_columns <- sum(columns_with_values_in_range)
+
+# Output the result
+length(HD1_prot_dist[,1]) - num_columns
+
+
+```
+
+## Heatmap
+```{r}
+clinker_heatmap <- pheatmap(HD1_prot_dist, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = HD1_diploid_labels,  # Label the rows
+         labels_col = HD1_diploid_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         fontsize = 6,
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "Ppo_prot_geneious_HD1_diploid_fulllength.png", plot = clinker_heatmap, width = 11, height = 10, dpi = 200, bg = "white")
+```
+
+Plot pankmer
+```{r}
+# Convert matrices to vectors and remove diagonal
+geo_vector <- geo_dist[lower.tri(geo_dist)]
+geno_vector <- HD1_prot_dist[lower.tri(HD1_prot_dist)]
+
+# Plot
+plot(geo_vector, geno_vector,
+     xlab = "Geographic Distance",
+     ylab = "Genomic Distance",
+     main = "Scatter Plot of Geographic vs. Genomic Distances",
+     pch = 19, col = "blue",)
+     #ylim = c(0.3,0.8))
+```
+
+Avg pairwise distances
+```{r}
+# Calculate average distances for each sample
+avg_geo_dist <- rowMeans(geo_dist)
+avg_geno_dist <- rowMeans(HD1_prot_dist)
+
+# Create a data frame for plotting
+data <- data.frame(Sample = sample_ids,
+                   Avg_Geo_Distance = avg_geo_dist,
+                   Avg_Geno_Similarity = avg_geno_dist)
+
+# Plot
+ggplot(data, aes(x = Avg_Geo_Distance, y = Avg_Geno_Similarity, label = Sample)) +
+  geom_point(color = "blue", size = 3) +
+  geom_text(vjust = -0.5, hjust = 0.5, size = 3) +
+  labs(x = "Average Geographic Distance", y = "Average Genomic Similarity", 
+       title = "Average Distances per Sample") # + xlim(45000, 60000)
+  theme_minimal()
+```
+
+# Ppo HD2 protein sequences
+## Import data etc
+```{r}
+# Load the k-mer distance matrix
+kmer_dist <- as.matrix(read_csv("Ppo_HD2_protein_dist_exonerate_2n.csv", col_names = TRUE))
+HD2_diploid_labels <- kmer_dist[,1]
+kmer_dist <- kmer_dist[,-1]
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist, 2, function(x) as.numeric(x))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 100
+
+# Multiply by 100 to convert to percentages
+HD2_prot_dist <- 1 - (kmer_dist_numeric / 100)
+
+
+# Generate a vector with sample IDs from column names
+#sample_ids_pankmer <- colnames(kmer_dist)
+
+# Load the Ppo coords
+#Ppo_coords <- read_csv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/01_initial_data_exploration/pankmer/Ppo_Coordinates.csv")
+
+# Calculate the distance matrix
+#geo_dist_pankmer <- distm(Ppo_coords[, c("longitude", "latitude")], fun = distHaversine)
+
+# Ensure the matrices are symmetrical and of the same size
+#kmer_dist <- as.dist(kmer_dist)
+#geo_dist_pankmer <- as.dist(geo_dist_pankmer)
+
+# Perform the Mantel test
+mantel_result <- vegan:::mantel(HD2_prot_dist, geo_dist, method = "spearman", permutations = 9999)
+
+# Print the Mantel test result
+print(mantel_result)
+
+```
+
+## Number of unique alleles
+```{r}
+# Create a logical matrix where TRUE indicates values between 0 and 0.1 (excluding 0)
+logical_matrix <- HD2_prot_dist > 0 & HD2_prot_dist < 0.1
+
+# Count the number of columns where there is at least one TRUE (i.e., at least one value between 0 and 0.1)
+columns_with_values_in_range <- colSums(logical_matrix) > 0
+
+# Count the number of such columns
+num_columns <- sum(columns_with_values_in_range)
+
+# Output the result
+length(HD2_prot_dist[,1]) - num_columns
+
+
+```
+
+
+## Heatmap
+```{r}
+clinker_heatmap <- pheatmap(HD2_prot_dist, 
+                            #kmeans_k = 5,
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = HD2_diploid_labels,  # Label the rows
+         labels_col = HD2_diploid_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         fontsize = 6,
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "Ppo_prot_geneious_HD2_diploid_fulllength.png", plot = clinker_heatmap, width = 11, height = 10, dpi = 200, bg = "white")
+```
+
+### Heatmap of common samples
+```{r}
+# Assuming 'dist_matrix' is your distance matrix
+
+# Replace values greater than or equal to 0.1 with NA
+dist_matrix_subset <- HD2_prot_dist
+dist_matrix_subset[HD2_prot_dist >= 0.1] <- NA
+
+# Function to check if the number of NAs in a row/column is equal to its length - 1
+remove_na_rows_cols <- function(matrix) {
+  # Find rows where number of NAs is equal to the number of columns - 1
+  row_filter <- apply(matrix, 1, function(x) sum(is.na(x)) < (ncol(matrix) - 1))
+  
+  # Find columns where number of NAs is equal to the number of rows - 1
+  col_filter <- apply(matrix, 2, function(x) sum(is.na(x)) < (nrow(matrix) - 1))
+  
+  # Subset the matrix to keep only the filtered rows and columns
+  matrix_filtered <- matrix[row_filter, col_filter, drop = FALSE]
+  
+  return(matrix_filtered)
+}
+
+# Apply the function to remove rows/columns with too many NAs
+dist_matrix_filtered <- remove_na_rows_cols(dist_matrix_subset)
+
+
+# Create a logical matrix where TRUE indicates values above 0.1
+logical_matrix <- HD2_prot_dist > 0.1
+
+# Count the number of TRUE values (i.e., values > 0.1) per row
+above_threshold_count <- rowSums(logical_matrix)
+
+# Subset the matrix to keep only rows and columns where the count is <= 53
+filtered_matrix <- HD2_prot_dist[above_threshold_count <= 53, above_threshold_count <= 53]
+
+# 
+
+HD2_common_heatmap <- pheatmap(filtered_matrix, 
+                            #kmeans_k = 5,
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         #labels_row = HD2_diploid_labels,  # Label the rows
+         #labels_col = HD2_diploid_labels,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         fontsize = 6,
+         border_color = NA)  # Remove border color
+
+```
+
+
+### Combined HD1 and HD2 heatmap
+```{r}
+# Assume HD1_prot_dist and HD2_prot_dist are square matrices of the same dimensions
+# HD1_diploid_labels and HD2_diploid_labels are the corresponding labels
+
+# Get the dimensions of the matrices
+n <- nrow(HD1_prot_dist)
+
+# Create an empty matrix to hold the combined data
+combined_matrix <- matrix(NA, n, n)
+
+# Fill the upper triangle with HD1_prot_dist
+combined_matrix[upper.tri(combined_matrix)] <- HD1_prot_dist[upper.tri(HD1_prot_dist)]
+
+# Fill the lower triangle with HD2_prot_dist
+combined_matrix[lower.tri(combined_matrix)] <- HD2_prot_dist[lower.tri(HD2_prot_dist)]
+
+# You can either choose one label set or mix them
+# We'll use HD1_diploid_labels for rows and HD2_diploid_labels for columns
+row_labels <- HD1_diploid_labels
+col_labels <- HD2_diploid_labels
+
+# Now plot the combined matrix using pheatmap
+clinker_heatmap <- pheatmap(combined_matrix, 
+                            #kmeans_k = 5,
+         cluster_rows = T,
+         cluster_cols = T,
+         color = viridis(256),  # Use viridis color palette
+         labels_row = row_labels,  # Label the rows with HD1 labels
+         labels_col = col_labels,  # Label the columns with HD2 labels
+         show_rownames = TRUE,
+         show_colnames = TRUE,
+         legend = TRUE,
+         fontsize = 6,
+         border_color = NA)  # Remove border color
+clinker_heatmap
+```
+
+
+Plot pankmer
+```{r}
+# Convert matrices to vectors and remove diagonal
+geo_vector <- geo_dist[lower.tri(geo_dist)]
+geno_vector <- HD2_prot_dist[lower.tri(HD2_prot_dist)]
+
+# Plot
+plot(geo_vector, geno_vector,
+     xlab = "Geographic Distance",
+     ylab = "Genomic Distance",
+     main = "Scatter Plot of Geographic vs. Genomic Distances",
+     pch = 19, col = "blue",)
+     #ylim = c(0.3,0.8))
+```
+
+Avg pairwise distances
+```{r}
+# Calculate average distances for each sample
+avg_geo_dist <- rowMeans(geo_dist)
+avg_geno_dist <- rowMeans(HD2_prot_dist)
+
+# Create a data frame for plotting
+data <- data.frame(Sample = sample_ids,
+                   Avg_Geo_Distance = avg_geo_dist,
+                   Avg_Geno_Similarity = avg_geno_dist)
+
+# Plot
+ggplot(data, aes(x = Avg_Geo_Distance, y = Avg_Geno_Similarity, label = Sample)) +
+  geom_point(color = "blue", size = 3) +
+  geom_text(vjust = -0.5, hjust = 0.5, size = 3) +
+  labs(x = "Average Geographic Distance", y = "Average Genomic Similarity", 
+       title = "Average Distances per Sample") # + xlim(45000, 60000)
+  theme_minimal()
+```
+
+
+# Ppo STE3 protein sequences
+## Import data etc
+```{r}
+# Load the k-mer distance matrix
+kmer_dist <- as.matrix(read_csv("Ppo_all_STE3_protein_dist.csv", col_names = TRUE))
+STE3_diploid_labels <- kmer_dist[,1]
+kmer_dist <- kmer_dist[,-1]
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist, 2, function(x) as.numeric(x))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 100
+
+# Multiply by 100 to convert to percentages
+STE3_all_prot_dist <- 1 - (kmer_dist_numeric / 100)
+
+
+# Generate a vector with sample IDs from column names
+#sample_ids_pankmer <- colnames(kmer_dist)
+
+# Load the Ppo coords
+#Ppo_coords <- read_csv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/01_initial_data_exploration/pankmer/Ppo_Coordinates.csv")
+
+# Calculate the distance matrix
+#geo_dist_pankmer <- distm(Ppo_coords[, c("longitude", "latitude")], fun = distHaversine)
+
+# Ensure the matrices are symmetrical and of the same size
+#kmer_dist <- as.dist(kmer_dist)
+#geo_dist_pankmer <- as.dist(geo_dist_pankmer)
+
+# Perform the Mantel test
+mantel_result <- vegan:::mantel(HD1_prot_dist, geo_dist, method = "spearman", permutations = 9999)
+
+# Print the Mantel test result
+print(mantel_result)
+
+```
+
+
+## Number of unique alleles
+```{r}
+hist(STE3_all_prot_dist, xlim = c(0, 0.1), breaks = 200)
+
+# Create a logical matrix where TRUE indicates values between 0 and 0.1 (excluding 0)
+logical_matrix <- STE3_all_prot_dist > 0 & STE3_all_prot_dist < 0.03
+
+# Count the number of columns where there is at least one TRUE (i.e., at least one value between 0 and 0.1)
+columns_with_values_in_range <- colSums(logical_matrix) > 0
+
+# Count the number of such columns
+num_columns <- sum(columns_with_values_in_range)
+
+# Output the result
+length(STE3_all_prot_dist[,1]) - num_columns
+
+```
+
+## Heatmap
+```{r}
+clinker_heatmap <- pheatmap(STE3_all_prot_dist, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = STE3_diploid_labels,  # Label the rows
+         labels_col = modified_locations,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         fontsize = 6,
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+#ggsave(filename = "Ppo_STE3_all_prot_dist.png", plot = clinker_heatmap, width = 11, height = 10, dpi = 200, bg = "white")
+```
+
+## Cluster by location
+```{r}
+STE3_diploid_locations <- STE3_diploid_labels
+
+# Assuming sample_valleys and STE3_diploid_locations are data frames
+
+# Step 1: Extract the first string before '_' in sample_valleys$INDIVIDUALS and store in a new column
+sample_valleys$prefix <- sub("_.*", "", sample_valleys$INDIVIDUALS)
+
+# Step 2: Create a vector to store modified STE3_diploid_locations
+modified_locations <- STE3_diploid_locations
+
+# Step 3: Loop through STE3_diploid_locations and replace matching entries
+for (i in seq_along(STE3_diploid_locations)) {
+  # Extract the prefix from STE3_diploid_locations
+  location_prefix <- sub("_.*", "", STE3_diploid_locations[i])
+  
+  # Find the match in sample_valleys$prefix
+  match_index <- match(location_prefix, sample_valleys$prefix)
+  
+  # If a match is found, replace the value in modified_locations with the corresponding POPULATION
+  if (!is.na(match_index)) {
+    modified_locations[i] <- sample_valleys$POPULATION[match_index]
+  }
+}
+
+# Output the modified locations
+modified_locations
+
+# Create a matrix where the distance is 0 if samples are from the same location, and 1 otherwise
+location_dist <- as.matrix(dist(as.numeric(factor(modified_locations))))
+
+# Step 2: Perform hierarchical clustering on the location distance matrix
+hc_location <- hclust(as.dist(location_dist), method = "complete")  # You can adjust the method
+
+# Step 3: Generate the heatmap, using different clustering for rows and columns
+
+STE3_location_heatmap <- pheatmap(
+  mat = STE3_all_prot_dist,  # The original distance matrix
+  cluster_rows = TRUE,  # The hclust object based on protein distance (lower triangle clustering)
+  cluster_cols = hc_location,  # The hclust object based on locations
+  show_rownames = TRUE,
+  show_colnames = TRUE,
+  color = viridis(256),  # Use viridis color palette
+         labels_row = STE3_diploid_labels,  # Label the rows
+         labels_col = modified_locations,  # Label the rows
+         fontsize = 5,
+         legend = TRUE,
+  main = "Cluster Heatmap with Location-based Column Clustering"
+)
+
+ggsave(filename = "STE3_location_heatmap.png", plot = STE3_location_heatmap, width = 11, height = 10, dpi = 300, bg = "white")
+```
+
+## Cluster by sample ID
+```{r}
+# Assuming sample_valleys and STE3_diploid_individuals are data frames
+
+# Step 1: Extract the first string before '_' in sample_valleys$INDIVIDUALS and store it in a new column 'prefix'
+sample_valleys$prefix <- sub("_.*", "", sample_valleys$INDIVIDUALS)
+
+# Step 2: Create a vector to store modified STE3_diploid_individuals
+modified_individuals <- STE3_diploid_labels
+
+# Step 3: Loop through STE3_diploid_individuals and replace matching entries based on Strain ID (prefix)
+for (i in seq_along(STE3_diploid_labels)) {
+  # Extract the prefix from STE3_diploid_individuals
+  individual_prefix <- sub("_.*", "", STE3_diploid_labels[i])
+  
+  # Find the match in sample_valleys$prefix
+  match_index <- match(individual_prefix, sample_valleys$prefix)
+  
+  # If a match is found, replace the value in modified_individuals with the corresponding Strain ID (prefix)
+  if (!is.na(match_index)) {
+    modified_individuals[i] <- sample_valleys$prefix[match_index]
+  }
+}
+
+# Output the modified individuals, which now contains the unique Strain IDs
+modified_individuals
+
+# Create a matrix where the distance is 0 if samples are from the same Strain ID, and 1 otherwise
+individual_dist <- as.matrix(dist(as.numeric(factor(modified_individuals))))
+
+# Step 2: Perform hierarchical clustering on the individual distance matrix
+hc_individual <- hclust(as.dist(individual_dist), method = "complete")  # You can adjust the method
+
+# Step 3: Generate the heatmap, using different clustering for rows and columns
+
+STE3_individual_heatmap <- pheatmap(
+  mat = STE3_all_prot_dist,  # The original distance matrix
+  cluster_rows = TRUE,  # The hclust object based on protein distance (lower triangle clustering)
+  cluster_cols = hc_individual,  # The hclust object based on individuals (Strain IDs)
+  show_rownames = TRUE,
+  show_colnames = TRUE,
+  color = viridis(256),  # Use viridis color palette
+  labels_row = STE3_diploid_labels,  # Label the rows
+  labels_col = modified_individuals,  # Label the columns with the Strain IDs
+  fontsize = 5,
+  legend = TRUE,
+  main = "Cluster Heatmap with Individual-based Column Clustering"
+)
+
+# Save the heatmap
+ggsave(filename = "STE3_individual_heatmap.png", plot = STE3_individual_heatmap, width = 11, height = 10, dpi = 300, bg = "white")
+
+```
+
+# Count contigs
+```{r}
+# Create the data frame with your data
+df <- read.table("ProteinName_hits.txt", header = TRUE, sep = "\t")
+
+# Count the number of occurrences of each Chromosome and ensure the result is numeric
+df$Chromosome_count <- as.numeric(ave(df$Chromosome, df$Chromosome, FUN=length))
+
+# Sort the dataframe by Chromosome count (descending) and Chromosome itself
+df_sorted <- df[order(-df$Chromosome_count, df$Chromosome), ]
+
+# Write the sorted data to a new file (optional)
+write.table(df_sorted, "ProteinName_hits_sorted.txt", sep = "\t", row.names = FALSE)
+
+# View the sorted dataframe
+print(df_sorted)
+
+# Subset the sorted dataframe to retain only the first occurrence of each Chromosome
+df_unique_chromosomes <- df_sorted[!duplicated(df_sorted$Chromosome), ]
+
+# View the result
+print(df_unique_chromosomes)
+
+# Optionally write the result to a file
+write.table(df_unique_chromosomes, "ProteinName_hits_unique_chromosomes.txt", sep = "\t", row.names = FALSE)
+
+
+```
+
+
+# Ppo matA cassette clinker distance
+## Import data etc
+```{r}
+clinker_rownames <- as.data.frame(read_tsv("pop_dates31incldups_clinker.txt", col_names = FALSE))[,1]
+
+# Load the k-mer distance matrix
+clinker_dist <- as.matrix(read_csv("out_matrix_02.csv", col_names = TRUE, col_types = "n"))
+clinker_dist <- (clinker_dist[,-1])
+rownames(clinker_dist) <- clinker_rownames
+colnames(clinker_dist) <- clinker_rownames
+
+heatmap(clinker_dist, color = viridis(256),)
+
+# Load the Ppo coords
+Ppo_coords_incldups <- read_csv("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/01_initial_data_exploration/pankmer/Ppo_Coordinates_incldups.csv")
+
+# Calculate the distance matrix
+geo_dist_clinker <- distm(Ppo_coords_incldups[, c("longitude", "latitude")], fun = distHaversine)
+
+# Ensure the matrices are symmetrical and of the same size
+#kmer_dist <- as.dist(kmer_dist)
+#geo_dist_pankmer <- as.dist(geo_dist_pankmer)
+
+# Perform the Mantel test
+mantel_result <- vegan:::mantel(clinker_dist, geo_dist_clinker, method = "spearman", permutations = 9999)
+
+# Print the Mantel test result
+print(mantel_result)
+
+```
+
+## Heatmap
+```{r}
+clinker_heatmap <- pheatmap(clinker_dist, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = clinker_rownames,  # Label the rows
+         labels_col = clinker_rownames,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "Ppo_matA_prot_clinker.png", plot = clinker_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+
+Plot pankmer
+```{r}
+# Convert matrices to vectors and remove diagonal
+geo_vector <- geo_dist_clinker[lower.tri(geo_dist_clinker)]
+geno_vector <- clinker_dist[lower.tri(clinker_dist)]
+
+# Plot
+plot(geo_vector, geno_vector,
+     xlab = "Geographic Distance",
+     ylab = "Genomic Distance",
+     main = "Scatter Plot of Geographic vs. Genomic Distances",
+     pch = 19, col = "blue",)
+     #ylim = c(0.3,0.8))
+```
+
+Avg pairwise distances
+```{r}
+# Calculate average distances for each sample
+avg_geo_dist <- rowMeans(geo_dist_clinker)
+avg_geno_dist <- rowMeans(clinker_dist)
+
+# Create a data frame for plotting
+data <- data.frame(Sample = clinker_rownames,
+                   Avg_Geo_Distance = avg_geo_dist,
+                   Avg_Geno_Similarity = avg_geno_dist)
+
+# Plot
+ggplot(data, aes(x = Avg_Geo_Distance, y = Avg_Geno_Similarity, label = Sample)) +
+  geom_point(color = "blue", size = 3) +
+  geom_text(vjust = -0.5, hjust = 0.5, size = 3) +
+  labs(x = "Average Geographic Distance", y = "Average Genomic Similarity", 
+       title = "Average Distances per Sample") # + xlim(45000, 60000)
+  theme_minimal()
+```
+
+
+# Ppo matB tests
+
+## ICMP9630 STE3_3 flanking region 4 kb
+### Import data
+```{r}
+# Load the protein distance matrix
+kmer_dist <- as.matrix(read_csv("./matBdist/ICMP9630_STE3_3_flank31fulllength_CDS.csv", col_names = TRUE))
+ICMP9630_STE3_3_flank_labels <- kmer_dist[,1]
+kmer_dist <- kmer_dist[,-1]
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist, 2, function(x) as.numeric(x))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 100
+
+# Multiply by 100 to convert to percentages
+ICMP9630_STE3_3_flank_CDS_dist <- 1 - (kmer_dist_numeric / 100)
+
+rownames(ICMP9630_STE3_3_flank_CDS_dist) <- colnames(ICMP9630_STE3_3_flank_CDS_dist) #<- sample_ids_29
+
+# Label rows and column by strain
+modified_individuals <- ICMP9630_STE3_3_flank_labels
+
+# Step 3: Loop through STE3_diploid_individuals and replace matching entries based on Strain ID (prefix)
+for (i in seq_along(ICMP9630_STE3_3_flank_labels)) {
+  # Extract the prefix from STE3_diploid_individuals
+  individual_prefix <- sub("_.*", "", ICMP9630_STE3_3_flank_labels[i])
+  
+  # Find the match in sample_valleys$prefix
+  match_index <- match(individual_prefix, sample_valleys$prefix)
+  
+  # If a match is found, replace the value in modified_individuals with the corresponding Strain ID (prefix)
+  if (!is.na(match_index)) {
+    modified_individuals[i] <- sample_ids_29[match_index]
+  }
+}
+
+# Output the modified individuals, which now contains the unique Strain IDs
+modified_individuals_ste3_flank <- modified_individuals
+rownames(ICMP9630_STE3_3_flank_CDS_dist) <- colnames(ICMP9630_STE3_3_flank_CDS_dist) <- modified_individuals_ste3_flank
+
+```
+
+### Number of unique alleles
+```{r}
+hist(ICMP9630_STE3_3_flank_CDS_dist, xlim = c(0, 0.2), breaks = 200)
+
+# Create a logical matrix where TRUE indicates values between 0 and 0.1 (excluding 0)
+logical_matrix <- ICMP9630_STE3_3_flank_CDS_dist > 0 & ICMP9630_STE3_3_flank_CDS_dist < 0.01
+
+# Count the number of columns where there is at least one TRUE (i.e., at least one value between 0 and 0.1)
+columns_with_values_in_range <- colSums(logical_matrix) > 0
+
+# Count the number of such columns
+num_columns <- sum(columns_with_values_in_range)
+
+# Output the result
+length(ICMP9630_STE3_3_flank_CDS_dist[,1]) - num_columns
+
+```
+
+### Heatmap
+
+```{r}
+clinker_heatmap <- pheatmap(ICMP9630_STE3_3_flank_CDS_dist, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "Ppo_ICMP9630_STE3_3_flank_CDS_dist_31_30kb.png", plot = clinker_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+## STE3 protein genes closest to ICMP9630 flanking region
+### Import data
+```{r}
+# Load the protein distance matrix
+kmer_dist <- as.matrix(read_csv("./matBdist/ICMP9630 flank_adjacent_STE3s_proteins.csv", col_names = TRUE))
+ICMP9630_STE3_adj_flank_labels <- kmer_dist[,1]
+kmer_dist <- kmer_dist[,-1]
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist, 2, function(x) as.numeric(x))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 100
+
+# Multiply by 100 to convert to percentages
+ICMP9630_STE3_adj_flank_protein_dist <- 1 - (kmer_dist_numeric / 100)
+
+# Label rows and column by strain
+modified_individuals <- ICMP9630_STE3_adj_flank_labels
+
+# Step 3: Loop through STE3_diploid_individuals and replace matching entries based on Strain ID (prefix)
+for (i in seq_along(ICMP9630_STE3_adj_flank_labels)) {
+  # Extract the prefix from STE3_diploid_individuals
+  individual_prefix <- sub("_.*", "", ICMP9630_STE3_adj_flank_labels[i])
+  
+  # Find the match in sample_valleys$prefix
+  match_index <- match(individual_prefix, sample_valleys$prefix)
+  
+  # If a match is found, replace the value in modified_individuals with the corresponding Strain ID (prefix)
+  if (!is.na(match_index)) {
+    modified_individuals[i] <- sample_ids_29[match_index]
+  }
+}
+
+# Output the modified individuals, which now contains the unique Strain IDs
+modified_individuals_ste3_flank <- modified_individuals
+rownames(ICMP9630_STE3_adj_flank_protein_dist) <- colnames(ICMP9630_STE3_adj_flank_protein_dist) <- modified_individuals_ste3_flank
+
+```
+
+### Number of unique alleles
+```{r}
+hist(ICMP9630_STE3_adj_flank_protein_dist, xlim = c(0, 0.2), breaks = 200)
+
+# Create a logical matrix where TRUE indicates values between 0 and 0.1 (excluding 0)
+logical_matrix <- ICMP9630_STE3_adj_flank_protein_dist > 0 & ICMP9630_STE3_adj_flank_protein_dist < 0.01
+
+# Count the number of columns where there is at least one TRUE (i.e., at least one value between 0 and 0.1)
+columns_with_values_in_range <- colSums(logical_matrix) > 0
+
+# Count the number of such columns
+num_columns <- sum(columns_with_values_in_range)
+
+# Output the result
+length(ICMP9630_STE3_adj_flank_protein_dist[,1]) - num_columns
+
+```
+
+### Heatmap
+
+```{r}
+clinker_heatmap <- pheatmap(ICMP9630_STE3_adj_flank_protein_dist, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "Ppo_ICMP9630_STE3_adj_flank_proteins.png", plot = clinker_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+## DH709 STE3_4 homologues
+### Import data
+```{r}
+# Load the protein distance matrix
+kmer_dist <- as.matrix(read_csv("./matBdist/STE3_4_homologues_29_prot.csv", col_names = TRUE))
+STE3_4_homologues_labels <- kmer_dist[,1]
+kmer_dist <- kmer_dist[,-1]
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist, 2, function(x) as.numeric(x))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 100
+
+# Multiply by 100 to convert to percentages
+STE3_4_homologues_prot_dist <- 1 - (kmer_dist_numeric / 100)
+
+rownames(STE3_4_homologues_prot_dist) <- colnames(STE3_4_homologues_prot_dist) <- sample_ids_29
+
+
+```
+
+### Heatmap
+
+```{r}
+clinker_heatmap <- pheatmap(STE3_4_homologues_prot_dist, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA)  # Remove border color
+
+ggsave(filename = "Ppo_STE3_4_homologues_prot_dist.png", plot = clinker_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+
+## DH709 STE3_3 homologues
+### Import data
+```{r}
+# Load the protein distance matrix
+kmer_dist <- as.matrix(read_csv("./matBdist/STE3_3_homologues_16.csv", col_names = TRUE))
+STE3_3_homologues_16_labels <- kmer_dist[,1]
+kmer_dist <- kmer_dist[,-1]
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist, 2, function(x) as.numeric(x))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 100
+
+# Multiply by 100 to convert to percentages
+STE3_3_homologues_16_prot_dist <- 1 - (kmer_dist_numeric / 100)
+
+# Label rows and column by strain
+modified_individuals <- STE3_3_homologues_16_labels
+
+# Step 3: Loop through STE3_diploid_individuals and replace matching entries based on Strain ID (prefix)
+for (i in seq_along(STE3_3_homologues_16_labels)) {
+  # Extract the prefix from STE3_diploid_individuals
+  individual_prefix <- sub("_.*", "", STE3_3_homologues_16_labels[i])
+  
+  # Find the match in sample_valleys$prefix
+  match_index <- match(individual_prefix, sample_valleys$prefix)
+  
+  # If a match is found, replace the value in modified_individuals with the corresponding Strain ID (prefix)
+  if (!is.na(match_index)) {
+    modified_individuals[i] <- sample_valleys$prefix[match_index]
+  }
+}
+
+# Output the modified individuals, which now contains the unique Strain IDs
+modified_individuals_prot <- modified_individuals
+rownames(STE3_3_homologues_16_prot_dist) <- colnames(STE3_3_homologues_16_prot_dist) <- modified_individuals_prot
+
+# Load the nucleotide distance matrix
+kmer_dist <- as.matrix(read_csv("./matBdist/STE3_3_homologues_16_CDS.csv", col_names = TRUE))
+STE3_3_homologues_16_labels <- kmer_dist[,1]
+kmer_dist <- kmer_dist[,-1]
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist, 2, function(x) as.numeric(x))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 100
+
+# Multiply by 100 to convert to percentages
+STE3_3_homologues_16_CDS_dist <- 1 - (kmer_dist_numeric / 100)
+
+# Label rows and column by strain
+modified_individuals <- STE3_3_homologues_16_labels
+
+# Step 3: Loop through STE3_diploid_individuals and replace matching entries based on Strain ID (prefix)
+for (i in seq_along(STE3_3_homologues_16_labels)) {
+  # Extract the prefix from STE3_diploid_individuals
+  individual_prefix <- sub("_.*", "", STE3_3_homologues_16_labels[i])
+  
+  # Find the match in sample_valleys$prefix
+  match_index <- match(individual_prefix, sample_valleys$prefix)
+  
+  # If a match is found, replace the value in modified_individuals with the corresponding Strain ID (prefix)
+  if (!is.na(match_index)) {
+    modified_individuals[i] <- sample_valleys$prefix[match_index]
+  }
+}
+
+# Output the modified individuals, which now contains the unique Strain IDs
+modified_individuals_CDS <- modified_individuals
+
+rownames(STE3_3_homologues_16_CDS_dist) <- colnames(STE3_3_homologues_16_CDS_dist) <- modified_individuals_CDS
+
+```
+### Clustering as tanglegram
+```{r}
+# Assuming your distance matrices are named dist_matrix1 and dist_matrix2
+# Perform hierarchical clustering on both distance matrices
+STE3_3_homologues_16_CDS_hc <- hclust(as.dist(STE3_3_homologues_16_CDS_dist), method = "average")  # or another method, e.g., "ward.D2"
+STE3_3_homologues_16_prot_hc <- hclust(as.dist(STE3_3_homologues_16_prot_dist), method = "average")
+
+# Convert hierarchical clustering objects into dendrograms
+STE3_3_homologues_16_CDS_dend <- as.dendrogram(STE3_3_homologues_16_CDS_hc)
+STE3_3_homologues_16_prot_dend <- as.dendrogram(STE3_3_homologues_16_prot_hc)
+
+# Align the two dendrograms (necessary before comparing)
+dend_list <- dendlist(STE3_3_homologues_16_CDS_dend, STE3_3_homologues_16_prot_dend) %>% untangle(method = "step2side")  # untangle to minimize entanglement
+
+# Plot the two dendrograms with entanglement
+tanglegram(dend_list, 
+           common_subtrees_color_lines = TRUE,  # color common subtrees
+           highlight_distinct_edges = TRUE,     # highlight distinct edges only in one dendrogram
+           main_left = "STE3_3_homologues_16_CDS",          # Title for left dendrogram
+           main_right = "STE3_3_homologues_16_proteins",         # Title for right dendrogram
+           common_subtrees_color_branches = TRUE,
+                                 lab.cex = 0.7,
+           margin_inner = 4,
+           main = paste("Entanglement =", round(entanglement(dend_list), 2)))  # Main title with entanglement value
+
+
+```
+
+### Clustering against HD1 matrix with same samples
+```{r}
+# Label rows and column by strain
+modified_individuals <- HD1_diploid_labels
+HD1_diploid_labels[1] <- "DH1310_"
+HD1_diploid_labels[2] <- "DH1310_"
+
+# Step 3: Loop through STE3_diploid_individuals and replace matching entries based on Strain ID (prefix)
+for (i in seq_along(HD1_diploid_labels)) {
+  # Extract the prefix from STE3_diploid_individuals
+  individual_prefix <- sub("_.*", "", HD1_diploid_labels[i])
+  
+  # Find the match in sample_valleys$prefix
+  match_index <- match(individual_prefix, sample_valleys$prefix)
+  
+  # If a match is found, replace the value in modified_individuals with the corresponding Strain ID (prefix)
+  if (!is.na(match_index)) {
+    modified_individuals[i] <- sample_valleys$prefix[match_index]
+  }
+}
+
+# Output the modified individuals, which now contains the unique Strain IDs
+modified_individuals_HD1 <- modified_individuals
+rownames(HD1_prot_dist) <- colnames(HD1_prot_dist) <- modified_individuals_HD1
+
+# First, convert the matrix entries to numeric values, if needed
+HD1_prot_dist_numeric <- as.matrix(apply(HD1_prot_dist, 2, as.numeric))
+
+# Extract unique sample IDs without "(reversed)"
+sample_ids <- unique(gsub(" \\(reversed\\)", "", rownames(HD1_prot_dist)))
+
+# Initialize a vector to store the best individual for each sample
+best_individuals <- character()
+
+# Loop through each sample ID and find the individual with the highest overall pairwise comparison score
+for (id in sample_ids) {
+  # Find rows that correspond to this sample (both "normal" and "reversed")
+  matching_rows <- grep(id, rownames(HD1_prot_dist))
+  
+  # Ensure that subsetting returns a matrix, even if there's only one row
+  matching_subset <- HD1_prot_dist_numeric[matching_rows, , drop = FALSE]
+  
+  # Calculate the total pairwise score for each matching individual (sum of all elements in the row)
+  total_scores <- rowSums(matching_subset)
+  
+  # Find the index of the individual with the highest score
+  best_row_index <- matching_rows[which.max(total_scores)]
+  
+  # Store the name of the best individual
+  best_individuals <- c(best_individuals, rownames(HD1_prot_dist)[best_row_index])
+}
+
+# Now subset the matrix using only the best individuals
+HD1_prot_dist_best <- HD1_prot_dist[best_individuals, best_individuals]
+
+
+
+## Create subset to match 16 individuals in matB test
+# Subset the matrix by selecting rows and columns that match the IDs in `modified_individuals_CDS`
+HD1_prot_dist_subset <- HD1_prot_dist_best[rownames(HD1_prot_dist_best) %in% modified_individuals_CDS, 
+                                      colnames(HD1_prot_dist_best) %in% modified_individuals_CDS]
+
+```
+
+#### Tanglegram
+```{r}
+# Perform hierarchical clustering on both distance matrices
+HD1_prot_hc <- hclust(as.dist(HD1_prot_dist_subset), method = "average")  # or another method, e.g., "ward.D2"
+
+# Convert hierarchical clustering objects into dendrograms
+HD1_prot_dend <- as.dendrogram(HD1_prot_hc)
+
+# Align the two dendrograms (necessary before comparing)
+dend_list_HD1_STE3 <- dendlist(HD1_prot_dend, STE3_3_homologues_16_prot_dend) %>% untangle(method = "step2side")  # untangle to minimize entanglement
+
+# Open a PNG device to save the plot
+png(filename = "HD1_STE3_prot_tangle.png", width = 1600, height = 800, res = 150)
+
+# Plot the two dendrograms with entanglement
+HD1_STE3_prot_tangle <- tanglegram(dend_list_HD1_STE3, 
+           common_subtrees_color_lines = TRUE,  # color common subtrees
+           highlight_distinct_edges = TRUE,     # highlight distinct edges only in one dendrogram
+           common_subtrees_color_branches = TRUE,
+           main_left = "HD1_proteins",          # Title for left dendrogram
+           main_right = "STE3_3_homologues_16_proteins",         # Title for right dendrogram
+                      lab.cex = 0.7,
+           margin_inner = 4,
+           main = paste("Entanglement =", round(entanglement(dend_list_HD1_STE3), 2)))  # Main title with entanglement value
+
+dev.off()
+
+# Align the two dendrograms (necessary before comparing)
+dend_list_HD1_STE3_CDS <- dendlist(HD1_prot_dend, STE3_3_homologues_16_CDS_dend) %>% untangle(method = "step2side", R = 100)  # untangle to minimize entanglement
+
+# Open a PNG device to save the plot
+png(filename = "HD1_STE3_CDS_tangle.png", width = 1600, height = 800, res = 150)
+
+# Plot the two dendrograms with entanglement
+HD1_STE3_CDS_tangle <- tanglegram(dend_list_HD1_STE3_CDS, 
+           common_subtrees_color_lines = TRUE,  # color common subtrees
+           highlight_distinct_edges = TRUE,     # highlight distinct edges only in one dendrogram
+           common_subtrees_color_branches = TRUE,
+           main_left = "HD1_proteins",          # Title for left dendrogram
+           main_right = "STE3_3_homologues_16_CDS",         # Title for right dendrogram
+           lab.cex = 0.7,
+           margin_inner = 4,
+           main = paste("Entanglement =", round(entanglement(dend_list_HD1_STE3_CDS), 2)))  # Main title with entanglement value
+
+dev.off()
+```
+#### Heatmap
+```{r}
+# Compute the difference between the two distance matrices
+diff_matrix <- as.matrix(HD1_prot_dist_subset) - as.matrix(STE3_3_homologues_16_prot_dist)
+
+pheatmap(diff_matrix)
+
+# Make sure both matrices are of the same size
+HD1 <- as.matrix(HD1_prot_dist_subset)
+STE3 <- as.matrix(STE3_3_homologues_16_prot_dist)
+
+# Combine the two matrices into one
+combined_matrix <- HD1  # Start with one matrix (HD1)
+combined_matrix[upper.tri(combined_matrix)] <- STE3[upper.tri(STE3)]  # Fill upper triangle with STE3
+
+# Melt the combined matrix for plotting
+melted_combined <- melt(combined_matrix)
+
+# Create the heatmap
+ggplot(data = melted_combined, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(min(melted_combined$value), max(melted_combined$value)), space = "Lab", name="Distance") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Individuals", y = "Individuals") +
+  coord_fixed()
+
+pheatmap(combined_matrix,
+         color = viridis(256))
+
+pheatmap(HD1_prot_dist_subset,
+         color = viridis(256))
+
+pheatmap(STE3_3_homologues_16_prot_dist,
+         color = viridis(256))
+```
+
+
+### Clustering against HD2 matrix with same samples
+```{r}
+# Label rows and column by strain
+modified_individuals <- HD2_diploid_labels
+HD2_diploid_labels[1] <- "DH1310_"
+HD2_diploid_labels[2] <- "DH1310_"
+
+# Step 3: Loop through STE3_diploid_individuals and replace matching entries based on Strain ID (prefix)
+for (i in seq_along(HD2_diploid_labels)) {
+  # Extract the prefix from STE3_diploid_individuals
+  individual_prefix <- sub("_.*", "", HD2_diploid_labels[i])
+  
+  # Find the match in sample_valleys$prefix
+  match_index <- match(individual_prefix, sample_valleys$prefix)
+  
+  # If a match is found, replace the value in modified_individuals with the corresponding Strain ID (prefix)
+  if (!is.na(match_index)) {
+    modified_individuals[i] <- sample_valleys$prefix[match_index]
+  }
+}
+
+# Output the modified individuals, which now contains the unique Strain IDs
+modified_individuals_HD2 <- modified_individuals
+rownames(HD2_prot_dist) <- colnames(HD2_prot_dist) <- modified_individuals_HD2
+
+# First, convert the matrix entries to numeric values, if needed
+HD2_prot_dist_numeric <- as.matrix(apply(HD2_prot_dist, 2, as.numeric))
+
+# Extract unique sample IDs without "(reversed)"
+sample_ids <- unique(gsub(" \\(reversed\\)", "", rownames(HD2_prot_dist)))
+
+# Initialize a vector to store the best individual for each sample
+best_individuals <- character()
+
+# Loop through each sample ID and find the individual with the highest overall pairwise comparison score
+for (id in sample_ids) {
+  # Find rows that correspond to this sample (both "normal" and "reversed")
+  matching_rows <- grep(id, rownames(HD2_prot_dist))
+  
+  # Ensure that subsetting returns a matrix, even if there's only one row
+  matching_subset <- HD2_prot_dist_numeric[matching_rows, , drop = FALSE]
+  
+  # Calculate the total pairwise score for each matching individual (sum of all elements in the row)
+  total_scores <- rowSums(matching_subset)
+  
+  # Find the index of the individual with the highest score
+  best_row_index <- matching_rows[which.max(total_scores)]
+  
+  # Store the name of the best individual
+  best_individuals <- c(best_individuals, rownames(HD2_prot_dist)[best_row_index])
+}
+
+# Now subset the matrix using only the best individuals
+HD2_prot_dist_best <- HD2_prot_dist[best_individuals, best_individuals]
+heatmap(HD2_prot_dist_best)
+heatmap(HD2_prot_dist_worst)
+
+
+
+## Create subset to match 16 individuals in matB test
+# Subset the matrix by selecting rows and columns that match the IDs in `modified_individuals_CDS`
+HD2_prot_dist_subset <- HD2_prot_dist_best[rownames(HD2_prot_dist_best) %in% modified_individuals_CDS, 
+                                      colnames(HD2_prot_dist_best) %in% modified_individuals_CDS]
+
+```
+
+#### Tanglegram
+```{r}
+# Perform hierarchical clustering on both distance matrices
+HD2_prot_hc <- hclust(as.dist(HD2_prot_dist_subset), method = "average")  # or another method, e.g., "ward.D2"
+
+# Convert hierarchical clustering objects into dendrograms
+HD2_prot_dend <- as.dendrogram(HD2_prot_hc)
+
+# Align the two dendrograms (necessary before comparing)
+dend_list_HD2_STE3 <- dendlist(HD2_prot_dend, STE3_3_homologues_16_prot_dend) %>% untangle(method = "step2side")  # untangle to minimize entanglement
+
+# Open a PNG device to save the plot
+png(filename = "HD2_STE3_prot_tangle.png", width = 1600, height = 800, res = 150)
+
+# Plot the two dendrograms with entanglement
+HD2_STE3_prot_tangle <- tanglegram(dend_list_HD2_STE3, 
+           common_subtrees_color_lines = TRUE,  # color common subtrees
+           highlight_distinct_edges = TRUE,     # highlight distinct edges only in one dendrogram
+           common_subtrees_color_branches = TRUE,
+           main_left = "HD2_proteins",          # Title for left dendrogram
+           main_right = "STE3_3_homologues_16_proteins",         # Title for right dendrogram
+                      lab.cex = 0.7,
+           margin_inner = 4,
+           main = paste("Entanglement =", round(entanglement(dend_list_HD2_STE3), 2)))  # Main title with entanglement value
+
+dev.off()
+
+# Align the two dendrograms (necessary before comparing)
+dend_list_HD2_STE3_CDS <- dendlist(HD2_prot_dend, STE3_3_homologues_16_CDS_dend) %>% untangle(method = "step2side", R = 100)  # untangle to minimize entanglement
+
+# Open a PNG device to save the plot
+png(filename = "HD2_STE3_CDS_tangle.png", width = 1600, height = 800, res = 150)
+
+# Plot the two dendrograms with entanglement
+HD2_STE3_CDS_tangle <- tanglegram(dend_list_HD2_STE3_CDS, 
+           common_subtrees_color_lines = TRUE,  # color common subtrees
+           highlight_distinct_edges = TRUE,     # highlight distinct edges only in one dendrogram
+           common_subtrees_color_branches = TRUE,
+           main_left = "HD2_proteins",          # Title for left dendrogram
+           main_right = "STE3_3_homologues_16_CDS",         # Title for right dendrogram
+           lab.cex = 0.7,
+           margin_inner = 4,
+           main = paste("Entanglement =", round(entanglement(dend_list_HD2_STE3_CDS), 2)))  # Main title with entanglement value
+
+dev.off()
+```
+
+#### Heatmap
+```{r}
+# Compute the difference between the two distance matrices
+diff_matrix <- as.matrix(HD2_prot_dist_subset) - as.matrix(STE3_3_homologues_16_prot_dist)
+
+pheatmap(diff_matrix)
+
+# Make sure both matrices are of the same size
+HD2 <- as.matrix(HD2_prot_dist_subset)
+STE3 <- as.matrix(STE3_3_homologues_16_prot_dist)
+
+# Combine the two matrices into one
+combined_matrix <- HD2  # Start with one matrix (HD2)
+combined_matrix[upper.tri(combined_matrix)] <- STE3[upper.tri(STE3)]  # Fill upper triangle with STE3
+
+# Melt the combined matrix for plotting
+melted_combined <- melt(combined_matrix)
+
+# Create the heatmap
+ggplot(data = melted_combined, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(min(melted_combined$value), max(melted_combined$value)), space = "Lab", name="Distance") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Individuals", y = "Individuals") +
+  coord_fixed()
+
+pheatmap(combined_matrix,
+         color = viridis(256))
+
+pheatmap(HD2_prot_dist_subset,
+         color = viridis(256))
+
+pheatmap(STE3_3_homologues_16_prot_dist,
+         color = viridis(256))
+```
+
+## HST6 adjacent
+### Import data
+```{r}
+# Load the protein distance matrix
+kmer_dist <- as.matrix(read_csv("./matBdist/matB_HST_adjacent_11.csv", col_names = TRUE))
+STE3_3_homologues_16_labels <- kmer_dist[,1]
+kmer_dist <- kmer_dist[,-1]
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist, 2, function(x) as.numeric(x))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 100
+
+# Multiply by 100 to convert to percentages
+STE3_3_homologues_16_prot_dist <- 1 - (kmer_dist_numeric / 100)
+
+# Label rows and column by strain
+modified_individuals <- STE3_3_homologues_16_labels
+
+# Step 3: Loop through STE3_diploid_individuals and replace matching entries based on Strain ID (prefix)
+for (i in seq_along(STE3_3_homologues_16_labels)) {
+  # Extract the prefix from STE3_diploid_individuals
+  individual_prefix <- sub("_.*", "", STE3_3_homologues_16_labels[i])
+  
+  # Find the match in sample_valleys$prefix
+  match_index <- match(individual_prefix, sample_valleys$prefix)
+  
+  # If a match is found, replace the value in modified_individuals with the corresponding Strain ID (prefix)
+  if (!is.na(match_index)) {
+    modified_individuals[i] <- sample_valleys$prefix[match_index]
+  }
+}
+
+# Output the modified individuals, which now contains the unique Strain IDs
+modified_individuals_prot <- modified_individuals
+rownames(STE3_3_homologues_16_prot_dist) <- colnames(STE3_3_homologues_16_prot_dist) <- modified_individuals_prot
+
+# Load the nucleotide distance matrix
+kmer_dist <- as.matrix(read_csv("./matBdist/matB_HST_adjacent_11_CDS.csv", col_names = TRUE))
+STE3_3_homologues_16_labels <- kmer_dist[,1]
+kmer_dist <- kmer_dist[,-1]
+
+# Convert the matrix to numeric by first replacing commas with periods for calculations
+kmer_dist_numeric <- apply(kmer_dist, 2, function(x) as.numeric(x))
+
+# Replace NAs with 1
+kmer_dist_numeric[is.na(kmer_dist_numeric)] <- 100
+
+# Multiply by 100 to convert to percentages
+STE3_3_homologues_16_CDS_dist <- 1 - (kmer_dist_numeric / 100)
+
+# Label rows and column by strain
+modified_individuals <- STE3_3_homologues_16_labels
+
+# Step 3: Loop through STE3_diploid_individuals and replace matching entries based on Strain ID (prefix)
+for (i in seq_along(STE3_3_homologues_16_labels)) {
+  # Extract the prefix from STE3_diploid_individuals
+  individual_prefix <- sub("_.*", "", STE3_3_homologues_16_labels[i])
+  
+  # Find the match in sample_valleys$prefix
+  match_index <- match(individual_prefix, sample_valleys$prefix)
+  
+  # If a match is found, replace the value in modified_individuals with the corresponding Strain ID (prefix)
+  if (!is.na(match_index)) {
+    modified_individuals[i] <- sample_valleys$prefix[match_index]
+  }
+}
+
+# Output the modified individuals, which now contains the unique Strain IDs
+modified_individuals_CDS <- modified_individuals
+
+rownames(STE3_3_homologues_16_CDS_dist) <- colnames(STE3_3_homologues_16_CDS_dist) <- modified_individuals_CDS
+
+```
+### Clustering as tanglegram
+```{r}
+# Assuming your distance matrices are named dist_matrix1 and dist_matrix2
+# Perform hierarchical clustering on both distance matrices
+STE3_3_homologues_16_CDS_hc <- hclust(as.dist(STE3_3_homologues_16_CDS_dist), method = "average")  # or another method, e.g., "ward.D2"
+STE3_3_homologues_16_prot_hc <- hclust(as.dist(STE3_3_homologues_16_prot_dist), method = "average")
+
+# Convert hierarchical clustering objects into dendrograms
+STE3_3_homologues_16_CDS_dend <- as.dendrogram(STE3_3_homologues_16_CDS_hc)
+STE3_3_homologues_16_prot_dend <- as.dendrogram(STE3_3_homologues_16_prot_hc)
+
+# Align the two dendrograms (necessary before comparing)
+dend_list <- dendlist(STE3_3_homologues_16_CDS_dend, STE3_3_homologues_16_prot_dend) %>% untangle(method = "step2side")  # untangle to minimize entanglement
+
+# Plot the two dendrograms with entanglement
+tanglegram(dend_list, 
+           common_subtrees_color_lines = TRUE,  # color common subtrees
+           highlight_distinct_edges = TRUE,     # highlight distinct edges only in one dendrogram
+           main_left = "STE3_3_homologues_16_CDS",          # Title for left dendrogram
+           main_right = "STE3_3_homologues_16_proteins",         # Title for right dendrogram
+           common_subtrees_color_branches = TRUE,
+           main = paste("Entanglement =", round(entanglement(dend_list), 2)))  # Main title with entanglement value
+
+
+```
+
+### Clustering against HD1 matrix with same samples
+```{r}
+## Create subset to match 16 individuals in matB test
+# Subset the matrix by selecting rows and columns that match the IDs in `modified_individuals_CDS`
+HD1_prot_dist_subset <- HD1_prot_dist_best[rownames(HD1_prot_dist_best) %in% modified_individuals_CDS, 
+                                      colnames(HD1_prot_dist_best) %in% modified_individuals_CDS]
+
+```
+
+#### Tanglegram
+```{r}
+# Perform hierarchical clustering on both distance matrices
+HD1_prot_hc <- hclust(as.dist(HD1_prot_dist_subset), method = "average")  # or another method, e.g., "ward.D2"
+
+# Convert hierarchical clustering objects into dendrograms
+HD1_prot_dend <- as.dendrogram(HD1_prot_hc)
+
+# Align the two dendrograms (necessary before comparing)
+dend_list_HD1_STE3 <- dendlist(HD1_prot_dend, STE3_3_homologues_16_prot_dend) %>% untangle(method = "step2side")  # untangle to minimize entanglement
+
+# Open a PNG device to save the plot
+png(filename = "HD1_HST_prot_tangle.png", width = 1600, height = 800, res = 150)
+
+# Plot the two dendrograms with entanglement
+HD1_HST_prot_tangle <- tanglegram(dend_list_HD1_STE3, 
+           common_subtrees_color_lines = TRUE,  # color common subtrees
+           highlight_distinct_edges = TRUE,     # highlight distinct edges only in one dendrogram
+           common_subtrees_color_branches = TRUE,
+           main_left = "HD1_proteins",          # Title for left dendrogram
+           main_right = "HST adjcacent STE3 proteins",         # Title for right dendrogram
+                      lab.cex = 0.7,
+           margin_inner = 4,
+           main = paste("Entanglement =", round(entanglement(dend_list_HD1_STE3), 2)))  # Main title with entanglement value
+
+dev.off()
+
+# Align the two dendrograms (necessary before comparing)
+dend_list_HD1_STE3_CDS <- dendlist(HD1_prot_dend, STE3_3_homologues_16_CDS_dend) %>% untangle(method = "step2side", R = 100)  # untangle to minimize entanglement
+
+# Open a PNG device to save the plot
+png(filename = "HD1_HST_CDS_tangle.png", width = 1600, height = 800, res = 150)
+
+# Plot the two dendrograms with entanglement
+HD1_HST_CDS_tangle <- tanglegram(dend_list_HD1_STE3_CDS, 
+           common_subtrees_color_lines = TRUE,  # color common subtrees
+           highlight_distinct_edges = TRUE,     # highlight distinct edges only in one dendrogram
+           common_subtrees_color_branches = TRUE,
+           main_left = "HD1_proteins",          # Title for left dendrogram
+           main_right = "HST adjcacent STE3 CDS",         # Title for right dendrogram
+           lab.cex = 0.7,
+           margin_inner = 4,
+           main = paste("Entanglement =", round(entanglement(dend_list_HD1_STE3_CDS), 2)))  # Main title with entanglement value
+
+dev.off()
+```
+
+
+### Clustering against HD2 matrix with same samples
+```{r}
+
+## Create subset to match 16 individuals in matB test
+# Subset the matrix by selecting rows and columns that match the IDs in `modified_individuals_CDS`
+HD2_prot_dist_subset <- HD2_prot_dist_best[rownames(HD2_prot_dist_best) %in% modified_individuals_CDS, 
+                                      colnames(HD2_prot_dist_best) %in% modified_individuals_CDS]
+
+#HD2_prot_dist_subset <- HD2_prot_dist_subset[-c(12-22, 12-22)]
+
+```
+
+#### Tanglegram
+```{r}
+# Perform hierarchical clustering on both distance matrices
+HD2_prot_hc <- hclust(as.dist(HD2_prot_dist_subset), method = "average")  # or another method, e.g., "ward.D2"
+
+# Convert hierarchical clustering objects into dendrograms
+HD2_prot_dend <- as.dendrogram(HD2_prot_hc)
+
+# Align the two dendrograms (necessary before comparing)
+dend_list_HD2_STE3 <- dendlist(HD2_prot_dend, STE3_3_homologues_16_prot_dend) %>% untangle(method = "step2side")  # untangle to minimize entanglement
+
+# Open a PNG device to save the plot
+png(filename = "HD2_HST_prot_tangle.png", width = 1600, height = 800, res = 150)
+
+# Plot the two dendrograms with entanglement
+HD2_HST_prot_tangle <- tanglegram(dend_list_HD2_STE3, 
+           common_subtrees_color_lines = TRUE,  # color common subtrees
+           highlight_distinct_edges = TRUE,     # highlight distinct edges only in one dendrogram
+           common_subtrees_color_branches = TRUE,
+           main_left = "HD2_proteins",          # Title for left dendrogram
+           main_right = "HST adjcacent STE3 proteins",         # Title for right dendrogram
+                      lab.cex = 0.7,
+           margin_inner = 4,
+           main = paste("Entanglement =", round(entanglement(dend_list_HD2_STE3), 2)))  # Main title with entanglement value
+
+dev.off()
+
+# Align the two dendrograms (necessary before comparing)
+dend_list_HD2_STE3_CDS <- dendlist(HD2_prot_dend, STE3_3_homologues_16_CDS_dend) %>% untangle(method = "step2side", R = 100)  # untangle to minimize entanglement
+
+# Open a PNG device to save the plot
+png(filename = "HD2_HST_CDS_tangle.png", width = 1600, height = 800, res = 150)
+
+# Plot the two dendrograms with entanglement
+HD2_HST_CDS_tangle <- tanglegram(dend_list_HD2_STE3_CDS, 
+           common_subtrees_color_lines = TRUE,  # color common subtrees
+           highlight_distinct_edges = TRUE,     # highlight distinct edges only in one dendrogram
+           common_subtrees_color_branches = TRUE,
+           main_left = "HD2_proteins",          # Title for left dendrogram
+           main_right = "HST adjcacent STE3 CDS",         # Title for right dendrogram
+           lab.cex = 0.7,
+           margin_inner = 4,
+           main = paste("Entanglement =", round(entanglement(dend_list_HD2_STE3_CDS), 2)))  # Main title with entanglement value
+
+dev.off()
+```
