@@ -1,0 +1,3056 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+Set working directory
+```{r}
+setwd("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains")
+```
+Set Java directory
+```{r}
+Sys.setenv(JAVA_HOME='C:/Program Files/Java/jre1.8.0_361') # for 64-bit version
+```
+
+
+
+#Install libraries
+```{r}
+install.packages("multcompView")
+install.packages("lmtest")
+install.packages("relaimpo")
+install.packages("ggplot2")
+install.packages("ggbeeswarm")
+install.packages("cati")
+install.packages("ecodist")
+install.packages("flextable")
+install.packages("Matrix")
+install.packages("lubridate")
+install.packages("tidyverse")
+install.packages("raster")
+install.packages("ggpubr")
+install.packages("rstatix")
+install.packages("xlsx")
+install.packages("BiodiversityR") #includes vegan
+#install.packages("vegan")
+install.packages("skimr")
+install.packages("nlme")
+install.packages("ape")
+install.packages("Hmisc")
+install.packages("devtools")
+install.packages("vctrs")
+devtools::install_github("dustinfife/flexplot")
+devtools::install_github("hiweller/colordistance", build_vignettes=TRUE)
+install.packages("MCMCglmm")
+install.packages("sjPlot")
+install.packages("glmmTMB")
+install.packages("MuMIn")
+install.packages("ade4")
+install.packages("MDMR")
+install.packages("gplots")
+install.packages("RColorBrewer")
+install.packages("svglite")
+install.packages("ggfortify")
+devtools::install_github("kylebittinger/usedist")
+install.packages("see")
+devtools::install_github("psyteachr/introdataviz")
+install.packages("ggrain")
+install.packages("ftExtra")
+```
+
+
+# Load libraries
+```{r}
+library(multcompView)
+library(lmtest)
+library(relaimpo)
+#library(cati)
+library(ecodist)
+library(flextable)
+#library(BiodiversityR)
+library(lubridate)
+library(tidyverse)
+library(raster)
+library(ggpubr)
+library(rstatix)
+library(xlsx)
+library(skimr)
+library(vegan)
+library(stringr)
+library(nlme)
+library(ape)
+library(Hmisc)
+library(lme4)
+library(flexplot)
+library(MASS)
+library(colordistance)
+library(MCMCglmm)
+library(sjPlot)
+library(glmmTMB)
+library(car)
+library(boot)
+library(MuMIn)
+library(ade4)
+library(cluster)
+library(MDMR)
+library(gplots)
+library(RColorBrewer)
+library(svglite)
+library(ggfortify)
+library(usedist)
+library(ggbeeswarm)
+library(see)
+library(introdataviz)
+library(ggrain)
+library(ftExtra)
+```
+
+
+#Read data
+
+The following section reads and correctly prepares all my data.
+
+```{r}
+prelim.data <- read.csv("C:/Users/HeraD/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Experiment1_prelimdata_20240315.csv")
+
+prelim.data <- prelim.data[-325,] #remove empty row
+prelim.data <- prelim.data[-325,] #remove empty rows
+```
+
+Convert columns into factors
+```{r}
+# Species
+prelim.data$Species.Code <- factor(prelim.data$Species.Code)
+# Location code
+prelim.data$Location_code <- factor(prelim.data$Location_code)
+# Position
+prelim.data$Experiment1Positition <- factor(prelim.data$Experiment1Positition)
+# Sample source (replicate ID)
+prelim.data$Sample.source <- factor(prelim.data$Sample.source)
+# Wild / cultivated type
+prelim.data$Cultivated.wild <- factor(prelim.data$Cultivated.wild)
+# Clade
+#prelim.data$Clade <- factor(prelim.data$Clade)
+# Species
+prelim.data$Species <- factor(prelim.data$Species)
+# Morphotype
+prelim.data$Morphotype <- factor(prelim.data$Morphotype)
+# Inoculation date
+prelim.data$Date <- as.Date(prelim.data$Date)
+# All dates
+prelim.data$SubstrateColonisationT1_date <- as.Date(prelim.data$SubstrateColonisationT1_date)
+prelim.data$SubstrateColonisationT2_date <- as.Date(prelim.data$SubstrateColonisationT2_date)
+prelim.data$Flush1PinningDate <- as.Date(prelim.data$Flush1PinningDate)
+prelim.data$Flush1PinningDate_Away <- as.Date(prelim.data$Flush1PinningDate_Away)
+prelim.data$Flush1HarvestDate <- as.Date(prelim.data$Flush1HarvestDate)
+prelim.data$Flush2PinningDate <- as.Date(prelim.data$Flush2PinningDate)
+prelim.data$Flush2HarvestDate <- as.Date(prelim.data$Flush2HarvestDate)
+#prelim.data$Flush3PinningDate <- as.Date(prelim.data$Flush3PinningDate)
+prelim.data$Flush3HarvestDate <- as.Date(prelim.data$Flush3HarvestDate)
+# Other factors
+prelim.data$Flush1Fruitbody_size <- factor(prelim.data$Flush1Fruitbody_size)
+prelim.data$Flush2Fruitbody_size <- factor(prelim.data$Flush2Fruitbody_size)
+prelim.data$Flush3Fruitbody_size <- factor(prelim.data$Flush3Fruitbody_size)
+prelim.data$Flush1Fruitbody_captexture <- factor(prelim.data$Flush1Fruitbody_captexture)
+prelim.data$Flush2Fruitbody_captexture <- factor(prelim.data$Flush2Fruitbody_captexture)
+prelim.data$Flush3Fruitbody_captexture <- factor(prelim.data$Flush3Fruitbody_captexture)
+prelim.data$Sporeprint_colour <- factor(prelim.data$Sporeprint_colour)
+prelim.data$ImmatureHarvestWetWEight <- as.numeric(prelim.data$ImmatureHarvestWetWEight)
+prelim.data$SubstrateEndWeightWet_raw <- as.numeric(prelim.data$SubstrateEndWeightWet_raw)
+
+```
+
+##Calculating time-based traits
+```{r}
+#Time from inoculation until fruiting
+prelim.data$Flush1Time_to_Fruiting <- as.numeric(prelim.data$Flush1PinningDate - prelim.data$Date)
+
+#Time from fruiting until harvest
+prelim.data$Flush1Time_to_Mature <- as.numeric(prelim.data$Flush1HarvestDate - prelim.data$Flush1PinningDate)
+
+```
+
+
+##Calculating dry weight and water content
+```{r}
+# First flush fruiting body dry weight
+prelim.data$Flush1Fruitbody_total_dryweight <- (prelim.data$Flush1Fruitbody_weight_dry/(prelim.data$Flush1Fruitbody_weight_wet_substrateremoved - prelim.data$Sporeprint_subsampl_weight) * prelim.data$Flush1Fruitbody_weight_wet_substrateremoved)
+
+# First flush fruiting body water content
+prelim.data$Flush1Fruitbody_water_content <- 1-(prelim.data$Flush1Fruitbody_weight_dry/(prelim.data$Flush1Fruitbody_weight_wet_substrateremoved - prelim.data$Sporeprint_subsampl_weight))
+
+# Second flush fruiting body dry weight
+prelim.data$Flush2Fruitbody_total_dryweight <- prelim.data$Flush2Fruitbody_weight_dry
+
+# Second flush fruiting body water content
+prelim.data$Flush2Fruitbody_water_content <- 1-(prelim.data$Flush2Fruitbody_weight_dry/(prelim.data$Flush2Fruitbody_weight_wet_substrateremoved))
+
+# Third flush fruiting body dry weight
+prelim.data$Flush3Fruitbody_total_dryweight <- prelim.data$Flush3Fruitbody_weight_dry
+
+# Third flush fruiting body water content
+prelim.data$Flush3Fruitbody_water_content <- 1-(prelim.data$Flush3Fruitbody_weight_dry/(prelim.data$Flush3Fruitbody_weight_wet_substrateremoved))
+
+# Fourth flush fruiting body dry weight
+prelim.data$Flush4Fruitbody_total_dryweight <- prelim.data$Flush4Fruitbody_weight_dry
+
+# Fourth flush fruiting body water content
+prelim.data$Flush4Fruitbody_water_content <- 1-(prelim.data$Flush4Fruitbody_weight_dry/(prelim.data$Flush4Fruitbody_weight_wet_substrateremoved))
+
+# Total biomass produced
+allweights <- c("Flush1Fruitbody_total_dryweight", "Flush2Fruitbody_total_dryweight", "Flush3Fruitbody_total_dryweight", "Flush4Fruitbody_total_dryweight", "ImmatureHarvestDryWeight", "AsexualGrowthWeightDry")
+
+prelim.data$TotalBiomassProducedDryWeight <- apply(prelim.data[, allweights], 1, sum, na.rm = T) #for each row, sum up all weights of fruitbodies, removing NAs. because this returns 0s where there were NAs in all rows, the following function replaces all 0s with NAs
+prelim.data$TotalBiomassProducedDryWeight <- replace(prelim.data$TotalBiomassProducedDryWeight, prelim.data$TotalBiomassProducedDryWeight == 0, NA)
+
+# Immature fruiting body dry weight (end of experiment)
+#prelim.data$ImmatureHarvestDryWeight 
+
+# Aborted Australis fruiting body dry weight (end of experiment)
+#prelim.data$AsexualGrowthWeightDry 
+
+## Substrate mass and substrate mass loss
+prelim.data[prelim.data$ImmatureHarvestWetWeight == "at MWLR"] <- NA # need to sort out this column with missing values
+prelim.data$SubstrateMassInitial <- 231 # 200 g of sawdust and 31g of grainspawn
+PaperBagWeightDry <- 20.87
+PlasticBagWeightDry <- 11.23
+prelim.data$SubstrateMassInitial[which(prelim.data$Sample.source == "Control")] <- 200 # correcting weight of Control
+
+# replace NAs with zeroes to calculate actual mass loss, subtracting any other data, because R can't handle NAs for the next step of calculating the percentage of mass loss
+prelim.data$SubstrateMassLoss <- 
+  prelim.data$SubstrateMassInitial -
+  (prelim.data$SubstrateEndWeightDry_raw - PaperBagWeightDry - PlasticBagWeightDry) -
+  (
+    (ifelse(is.na(prelim.data$Flush1Fruitbody_weight_wet), 0, prelim.data$Flush1Fruitbody_weight_wet) -
+       ifelse(is.na(prelim.data$Flush1Fruitbody_weight_wet_substrateremoved), 0, prelim.data$Flush1Fruitbody_weight_wet_substrateremoved)) +
+      (ifelse(is.na(prelim.data$Flush2Fruitbody_weight_wet), 0, prelim.data$Flush2Fruitbody_weight_wet) -
+       ifelse(is.na(prelim.data$Flush2Fruitbody_weight_wet_substrateremoved), 0, prelim.data$Flush2Fruitbody_weight_wet_substrateremoved)) +
+      (ifelse(is.na(prelim.data$Flush3Fruitbody_weight_wet), 0, prelim.data$Flush3Fruitbody_weight_wet) -
+       ifelse(is.na(prelim.data$Flush3Fruitbody_weight_wet_substrateremoved), 0, prelim.data$Flush3Fruitbody_weight_wet_substrateremoved)) +
+      (ifelse(is.na(prelim.data$Flush4Fruitbody_weight_wet), 0, prelim.data$Flush4Fruitbody_weight_wet) -
+       ifelse(is.na(prelim.data$Flush4Fruitbody_weight_wet_substrateremoved), 0, prelim.data$Flush4Fruitbody_weight_wet_substrateremoved)) +
+      (ifelse(is.na(prelim.data$AsexualGrowthWeightWet), 0, prelim.data$AsexualGrowthWeightWet) -
+       ifelse(is.na(prelim.data$AsexualGrowthWeightWet_substrateremoved), 0, prelim.data$AsexualGrowthWeightWet_substrateremoved)) +
+      (ifelse(is.na(prelim.data$ImmatureHarvestWetWEight), 0, prelim.data$ImmatureHarvestWetWEight) -
+       ifelse(is.na(prelim.data$ImmatureHarvestWetWEight_substrateremoved), 0, prelim.data$ImmatureHarvestWetWEight_substrateremoved))
+  ) * (prelim.data$SubstrateEndWeightDry_raw/prelim.data$SubstrateEndWeightWet_raw)
+
+## Substrate mass and substrate mass loss
+prelim.data$SubstrateMassLossPercentage <- (prelim.data$SubstrateMassLoss)/prelim.data$SubstrateMassInitial
+```
+
+
+## Calculating Spore Load (sporeprint weight ratio)
+```{r}
+# Formula is Sporeprint dry weight / (SubsampleWetWeight - SubsampleWetWeight * Water Content)
+prelim.data$SporeLoad <- prelim.data$Sporeprint_weight_dry/(prelim.data$Sporeprint_subsampl_weight- prelim.data$Sporeprint_subsampl_weight*prelim.data$Flush1Fruitbody_water_content)
+
+# Removing outlier DH1153 (error in data entry possibly)
+prelim.data$SporeLoad[prelim.data$SporeLoad > 1.0] <- NA
+
+# Changing zeroes and negative values to zero
+#prelim.data$SporeLoad[prelim.data$SporeLoad < 0.0001] <- NA
+
+# Adding the only true zeroes I've recorded for ICMP11565 which no spores were observed
+prelim.data$SporeLoad[prelim.data$Location_code == "ICMP11565"] <- 0
+```
+
+## Import image metrics: colour and fruitbody size from other R markdown file
+Ex1_colordistance_import.Rmd
+
+```{r}
+# Objects are: Flush1_Fruitbody_size and RGB_values_Flush1. Both have an Experiment1Positition column that I can use to match data
+Flush1_Fruitbody_size <- readRDS(file = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/R project/Robjects/Flush1_Fruitbody_size.rds")
+RGB_values_Flush1 <- readRDS(file = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/R project/Robjects/RGB_values_Flush1.rds")
+
+prelim.data <- left_join(prelim.data, Flush1_Fruitbody_size, by = "Experiment1Positition")
+prelim.data <- left_join(prelim.data, RGB_values_Flush1, by = "Experiment1Positition")
+```
+
+
+## loading hardness measurements
+Hardness measurements from texture analyser are all stored in a specific cell in individual xlsx files
+
+```{r}
+setwd("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/raw data/texture measurements/")
+hardnessList <- list.files("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/raw data/texture measurements/")
+
+hardnessData = lapply(hardnessList, function(i){
+    x = read.xlsx(i, sheetIndex=1, sheetName=NULL, startRow=10,
+        endRow=11, as.data.frame=TRUE, header=T)
+    # Get the columns you want: 13 (M)
+    x = x[, 11]
+    # You may want to add a column to say which file they're from
+    x$Experiment1Positition = basename(i)
+    # Return your data
+    x
+})
+
+hardnessDataF = do.call("rbind.data.frame", hardnessData)
+
+hardnessDataF$Experiment1Positition <- sub(".xls", "", hardnessDataF$Experiment1Positition)
+
+colnames(hardnessDataF)[1] <- 'Flush1_Hardness'
+```
+
+## Adding hardness measurements into the rest of my datasheet
+```{r}
+merged_prelimData <- full_join(prelim.data, hardnessDataF, by = "Experiment1Positition")
+```
+
+
+## Remove outliers
+```{r}
+# Dja dry and tiny - "C1-22  DH814 Dja" - driest fruitbody - "C2-21 DH803 Dja" - tiny fruitbody
+
+# Identify rows where Experiment1Position is "C1-22" or "C2-21"
+rows <- merged_prelimData$Experiment1Positition %in% c("C1-22", "C2-21")
+
+# Replace the corresponding values in Flush1_Hardness and Flush1Fruitbody_water_content with NAs
+merged_prelimData$Flush1_Hardness[rows] <- NA
+merged_prelimData$Flush1Fruitbody_water_content[rows] <- NA
+
+```
+
+
+# global variables and vectors
+
+Global color palette for my 5 species and appropriate levels
+```{r}
+SpeciesColors = c("#FB9A99", "#E69F00", "#56B4E9", "#009E73", "#D55E00", "grey")
+four_colors = c("#FB9A99", "#E69F00", "#56B4E9", "#009E73")
+ColorLevels = c("Dja", "Pars", "Pul", "Ppo", "Aus", "Control")
+SpeciesColorsPul = c("#FB9A99", "#E69F00", "#56B4E9", "#4C7113", "#009E73", "#D55E00", "grey")
+ColorLevelsPul = c("Dja", "Pars", "Pul_NZ", "Pul_intl", "Ppo", "Aus", "Control")
+merged_prelimData$Species.Code <- factor(merged_prelimData$Species.Code, levels = ColorLevels)
+filtered_Data$Species.Code <- factor(filtered_Data$Species.Code, levels = ColorLevels)
+names(SpeciesColors) <- ColorLevels
+filtered_Data$Species <- factor(filtered_Data$Species, levels = ColorLevelsPul)
+names(SpeciesColorsPul) <- ColorLevelsPul
+specieslabels = c("Dja" = "P. djamor", "Pars" = "P. parsonsiae", "Pul_NZ" = "P. pulmonarius NZ", "Pul_intl" = "P. pulmonarius intl.", "Ppo" = "P. purpureo-olivaceus", "Aus" = "P. australis")
+specieslabelsRepr = c("Dja" = "P. djamor", "Pars" = "P. parsonsiae", "Pul_NZ" = "P. pulmonarius NZ", "Pul_intl" = "P. pulmonarius intl.", "Aus" = "P. australis")
+```
+
+#Global trait list
+```{r}
+includeTraits <- c("SubstratePointsColonizedT1", "SubstratePointsColonizedT2", "SubstrateMassLossPercentage",
+                   "Flush1Time_to_Fruiting", "Flush1Time_to_Mature", "Flush1Fruitbody_number", 
+                   "Flush1_Fruitbody_size", "Flush1Fruitbody_total_dryweight", "Flush1_Hardness", 
+                   "Flush1Fruitbody_water_content", "TotalBiomassProducedDryWeight", "Cap_r", "Cap_g", 
+                   "Cap_b", "Gill_r", "Gill_g", "Gill_b")
+
+traitLabels <- c("Substrate colonised (day 8)", "Substrate colonised (day 16)", "Substrate mass loss (%)",
+                 "Time to fruit", "Time to mature", "Number of fruitbodies", "Fruitbody size",
+                 "Fruitbody weight", "Fruitbody hardness", "Fruitbody water content", "Total biomass produced",
+                 "Cap colour - Reds", "Cap colour - Greens", "Cap colour - Blues", "Gill colour - Reds",
+                 "Gill colour - Greens", "Gill colour - Blues")
+
+traitLabelsNoUnits <- c("Substrate colonised (day 8)", "Substrate colonised (day 16)", "Substrate mass loss",
+                        "Time to fruit", "Time to mature", "Number of fruitbodies", "Fruitbody size",
+                        "Fruitbody weight", "Fruitbody hardness", "Fruitbody water content", "Total biomass produced", "Cap colour - Reds", "Cap colour - Greens", "Cap colour - Blues", "Gill colour - Reds", "Gill colour - Greens", "Gill colour - Blues")
+
+includeReprTraits_Named <- c("Time to fruit (d)", "Time to mature (d)", "Number of Sporocarps","Cap colour - Reds (%)", "Cap colour - Greens (%)", "Cap colour - Blues (%)", "Gill colour - Reds (%)", "Gill colour - Greens (%)", "Gill colour - Blues (%)", "Sporocarp hardness (g)", "Sporocarp water content (%)",  "Sporocarp size (mm2)", "Sporocarp weight (g)", "Total biomass produced (g)")
+
+includeColourtraits <- c("Cap_r", "Cap_g", "Cap_b", "Gill_r", "Gill_g", "Gill_b")
+
+includeReprTraits <- c("Flush1Time_to_Fruiting", "Flush1Time_to_Mature", "Flush1Fruitbody_number","Cap_r", "Cap_g", "Cap_b", "Gill_r", "Gill_g", "Gill_b", "Flush1_Hardness", "Flush1Fruitbody_water_content",  "Flush1_Fruitbody_size", "Flush1Fruitbody_total_dryweight", "TotalBiomassProducedDryWeight")
+
+
+
+includeVegTraits <- c("SubstrateMassLossPercentage", "SubstratePointsColonizedT1", "SubstratePointsColonizedT2")
+includeVegTraits_Named <- c("Substrate mass loss (%)", "Substrate colonised (day 8)", "Substrate colonised (day 16)")
+
+includeGroups <- c("Experiment1Positition", "Sample.source", "Species.Code", "Species")
+
+includeGroupsandTraits <- c("Experiment1Positition", "Sample.source", "Species.Code", includeTraits)
+```
+
+# Calculating number of strains that fruited all 3 replicates
+```{r}
+#Subset data to only focus on Dja, Pars and Pul
+repstrains <- c("Aus", "Ppo", "Control")
+calculation_data <- merged_prelimData[!(merged_prelimData$Species.Code %in% c("Control", "Ppo", "Aus")), ]
+
+# Group by Sample.Source and count the number of non-NA Flush1PinningDate entries for each strain
+count_data <- calculation_data %>%
+  group_by(Sample.source) %>%
+  summarise(replicate_count = sum(!is.na(Flush1PinningDate)), .groups = 'drop')
+
+# Filter to keep only those strains that have 3 replicates
+successful_strains <- count_data %>% filter(replicate_count == 3)
+
+# Count the number of unique strains that have successfully fruited in all three replicates
+num_successful_strains <- nrow(successful_strains)
+
+# Print the result
+print(num_successful_strains)
+
+# Calculate mean and standard deviation of the replicate counts
+mean_replicates <- mean(count_data$replicate_count)
+std_replicates <- sd(count_data$replicate_count)
+
+# Print the results
+cat("Number of strains where all 3 replicates fruited", num_successful_strains, "\n")
+cat("Proportion of strains where all 3 replicates fruited", num_successful_strains/45, "\n")
+cat("Mean count of replicates that fruited:", mean_replicates, "\n")
+cat("Standard deviation of replicates that fruited:", std_replicates, "\n")
+```
+
+
+# Filtering my source data to only include relevant data for my analysis
+
+Create one dataframe per trait for filtering in the next step
+
+The following code creates one new dataframe for each trait from my global traits list object includeTraits. All the trait specific dataframes then get combined into a new master dataframe called filtered_Data.
+```{r}
+for (i in includeTraits) {
+  nmissingtable <- table(merged_prelimData$Sample.source, is.na(merged_prelimData[i])) # check which observations have no records, for a given trait
+  includeStrain <- row.names(nmissingtable)[nmissingtable[,1] > 2] # create list of strains that have 3 or more records
+  tempPlottingData <- merged_prelimData[merged_prelimData$Sample.source %in% includeStrain,] # subsetting from original dataframe
+  tempPlottingData <- tempPlottingData[, names(tempPlottingData) %in% c("Experiment1Positition", i)] # selecting only position ID and trait data
+  assign(paste0(i), tempPlottingData) # create a new name for the output dataframe, which has two variables: position ID and data for the i trait
+}
+
+```
+
+Creating a new dataframe with the filtered data temp trait objects from above #baseRftw!
+```{r}
+rm(filtered_Data)
+filtered_Data <- merged_prelimData[, c(1:9)] # create new dataframe with just Experiment1Position ID until column 9 ("Species")
+#colnames(filtered_Data) <- c("Experiment1Positition")
+
+for (i in includeTraits) {
+    tempTrait <- get(i) # find object with same name as trait
+filtered_Data[i] <- tempTrait[, c(2)][match(filtered_Data$Experiment1Positition, tempTrait$Experiment1Positition)] # match() is used to look for values in first dataframe, compare them to values in second dataframe, and then populate data in chosen column 
+}
+
+## Adding shelf position to data
+positionA <- as.factor(substr(filtered_Data$Experiment1Positition, 1, 1)) # shelf position (1-24)
+positionB <- as.factor(substr(filtered_Data$Experiment1Positition, 2, 2)) # shelf position (1-24)
+filtered_Data$shelfxlevel <- paste0(positionA,"", positionB)
+filtered_Data$shelf <- paste0(positionA)
+filtered_Data$level <- paste0(positionB)
+```
+
+## Adding shelf position to data
+
+```{r}
+#filtered_Data$shelf <- as.factor(substr(filtered_Data$Experiment1Positition, 1, 1)) # shelf ID (A-D)
+#filtered_Data$shelflevel <- as.factor(substr(filtered_Data$Experiment1Positition, 2, 2)) # shelf level (1-5)
+#positionA <- as.factor(substr(filtered_Data$Experiment1Positition, 4, 4)) # shelf position (1-24)
+#positionB <- as.factor(substr(filtered_Data$Experiment1Positition, 5, 5)) # shelf position (1-24)
+#filtered_Data$shelfposition <- paste0(positionA,"", positionB)
+
+positionA <- as.factor(substr(filtered_Data$Experiment1Positition, 1, 1)) # shelf position (1-24)
+positionB <- as.factor(substr(filtered_Data$Experiment1Positition, 2, 2)) # shelf position (1-24)
+filtered_Data$shelfxlevel <- paste0(positionA,"", positionB)
+filtered_Data$shelf <- paste0(positionA)
+filtered_Data$level <- paste0(positionB)
+#filtered_Data$shelfxlevel <- gsub("^(.{1})5", "\\14", filtered_Data$shelfxlevel) #merge shelf bottom layer with one above (4 and 5) because level 5 only has 3 observations
+
+```
+
+
+```{r}
+#Remove objects with trait names again
+rm(Flush1_Hardness)
+rm(Flush1Time_to_Mature)
+rm(Flush1Time_to_Fruiting)
+rm(SubstrateMassLossPercentage)
+rm(Flush1Fruitbody_total_dryweight)
+rm(Flush1Fruitbody_water_content)
+```
+
+# Calculating number of strains that fruited all 3 replicates
+```{r}
+#Subset data to only focus on Dja, Pars and Pul
+repstrains <- c("Aus", "Ppo", "Control")
+calculation_data <- filtered_Data[!(filtered_Data$Species.Code %in% c("Control", "Ppo", "Aus")), ]
+
+# Group by Sample.Source and count the number of non-NA Flush1PinningDate entries for each strain
+count_data <- calculation_data %>%
+  group_by(Sample.source) %>%
+  summarise(replicate_count = sum(!is.na(Flush1Time_to_Mature)), .groups = 'drop')
+
+# Filter to keep only those strains that have 3 replicates
+successful_strains <- count_data %>% filter(replicate_count == 3)
+
+# Count the number of unique strains that have successfully fruited in all three replicates
+num_successful_strains <- nrow(successful_strains)
+
+# Print the result
+print(num_successful_strains)
+
+# Calculate mean and standard deviation of the replicate counts
+mean_replicates <- mean(count_data$replicate_count)
+std_replicates <- sd(count_data$replicate_count)
+
+# Print the results
+cat("Number of strains where all 3 replicates fruited", num_successful_strains, "\n")
+cat("Proportion of strains where all 3 replicates fruited", num_successful_strains/45, "\n")
+cat("Mean count of replicates that fruited:", mean_replicates, "\n")
+cat("Standard deviation of replicates that fruited:", std_replicates, "\n")
+```
+
+# Individual trait results
+
+## Distance matrix (Euclidean) for testing hypothesis 1 (within-species variation in reproductive vs vegetative traits)
+```{r}
+# Remove identifiers from data, using my transformed data (normalised data for distance)
+# exclude Australis
+filtered_Data_NoAus <- filtered_Data[!filtered_Data$Species.Code == "Aus",]
+#filtered_Data_NoAus <- filtered_Data
+filtered_Data_NoAus <- filtered_Data_NoAus[!filtered_Data_NoAus$Species.Code == "Control",]
+filtered_Data_NoAus <- filtered_Data_NoAus[!filtered_Data_NoAus$Species.Code == "Ppo",]
+filtered_Data_NoAus <- filtered_Data_NoAus[order(filtered_Data_NoAus$Species.Code),] # order by Species
+data_for_distance <- filtered_Data_NoAus
+data_for_distance$Species.Code <- factor(data_for_distance$Species.Code, levels = ColorLevels)
+data_for_distance$Species <- factor(data_for_distance$Species, levels = ColorLevelsPul)
+
+# Filter for cultivated/wild testing
+data_for_hyp2 <- data_for_distance[!data_for_distance$Species == "Pul_intl",]
+data_for_hyp2 <- data_for_hyp2[!data_for_hyp2$Species == "Dja",]
+data_for_hyp2 <- data_for_hyp2[!apply(is.na(data_for_hyp2[includeTraits]), 1, any), ] # remove any rows with NAs
+data_scaled_hyp2 <- decostand(data_for_hyp2[includeTraits], method = "standardize")
+
+## Scale my data using decostand()
+data_scaled <- decostand(data_for_distance[includeTraits], method = "standardize")
+data_scaled_hyp2 <- decostand(data_for_hyp2[includeTraits], method = "standardize")
+# log transform first
+#data_scaled <- decostand(log(data_for_distance[includeTraits]), method = "standardize")
+
+# create labels dataframe
+sample_labels <- as.data.frame(data_for_distance$Species.Code)
+sample_labels$Strains <- data_for_distance$Sample.source
+sample_labels <- rename(sample_labels, "Species" = "data_for_distance$Species.Code")
+
+# Categorizing traits by vegetative/reproductive
+vegetative_traits <- c("SubstratePointsColonizedT1", "SubstratePointsColonizedT2", "SubstrateMassLossPercentage")
+reproductive_traits <- c("Flush1Time_to_Fruiting", "Flush1Time_to_Mature", "Flush1Fruitbody_total_dryweight", "TotalBiomassProducedDryWeight", "Flush1_Hardness", "Flush1_Fruitbody_size", "Cap_r", "Cap_g", "Cap_b", "Gill_r", "Gill_g", "Gill_b", "Flush1Fruitbody_number", "Flush1Fruitbody_water_content")
+
+# Split data into vegetative and reproductive
+vegetative_results <- data_scaled[, vegetative_traits]
+vegetative_results <- vegetative_results[!apply(is.na(vegetative_results[vegetative_traits]), 1, any), ] # remove any rows with NAs
+#vegetative_results$SubstratePointsColonizedT1 <- as.numeric(vegetative_results$SubstratePointsColonizedT1)
+#vegetative_results$SubstratePointsColonizedT2 <- as.numeric(vegetative_results$SubstratePointsColonizedT2)
+reproductive_results <- data_scaled[, reproductive_traits]
+reproductive_results <- reproductive_results[!apply(is.na(reproductive_results[reproductive_traits]), 1, any), ] # remove any rows with NAs
+
+# remove any rows with NAs
+data_scaled_noNA <- data_scaled[!apply(is.na(data_scaled[includeTraits]), 1, any), ] # remove any rows with NAs
+
+# remove any rows with NAs
+data_for_alltraits_noNA <- data_for_distance[!apply(is.na(data_for_distance[includeTraits]), 1, any), ] # remove any rows with NAs
+
+# Remove NAs from all traits data
+data_scaled_NArm <- data_scaled[!apply(is.na(data_scaled[includeTraits]), 1, any), ] # remove any rows with NAs
+
+#rename traits into full descriptions
+for(i in 1:length(includeTraits)){
+  if(includeTraits[i] %in% colnames(vegetative_results)){
+    colnames(vegetative_results)[colnames(vegetative_results) == includeTraits[i]] <- traitLabelsNoUnits[i]
+  }
+}
+
+for(i in 1:length(includeTraits)){
+  if(includeTraits[i] %in% colnames(reproductive_results)){
+    colnames(reproductive_results)[colnames(reproductive_results) == includeTraits[i]] <- traitLabelsNoUnits[i]
+  }
+}
+
+# subsetting original data for only rows with vegetative traits data
+data_for_vegetative <- data_for_distance[!apply(is.na(data_for_distance[vegetative_traits]), 1, any), ] # remove any rows with NAs
+data_for_vegetative$Species.Code <- factor(data_for_vegetative$Species.Code, levels = ColorLevels)
+#data_for_vegetative <- data_for_vegetative %>% #rename species acronyms into full species names
+#  mutate(Species.Code = as.character(Species.Code)) %>%
+#  mutate(Species.Code = ifelse(Species.Code %in% names(specieslabels), specieslabels[Species.Code], Species.Code)) %>%
+#  mutate(Species.Code = as.factor(Species.Code))
+#colnames(data_for_vegetative)[colnames(data_for_vegetative) %in% includeTraits] <- traitLabels # rename traits
+
+# subsetting original data for only rows with reproductive traits data
+data_for_reproductive <- data_for_distance[!apply(is.na(data_for_distance[reproductive_traits]), 1, any), ] # remove any rows with NAs
+data_for_reproductive$Species.Code <- factor(data_for_reproductive$Species.Code, levels = ColorLevels)
+
+data_for_reproductive <- data_for_reproductive %>%
+  mutate(Species.Code = as.character(Species.Code)) %>%
+  mutate(Species.Code = ifelse(Species.Code %in% names(specieslabels), specieslabels[Species.Code], Species.Code)) %>%
+  mutate(Species.Code = as.factor(Species.Code))
+
+# calculating Gower's distance matrix for each group
+vegetative_daisy <- daisy(vegetative_results, metric = "euclidean")
+vegetative_daisy_matrix <- as.matrix(vegetative_daisy)
+reproductive_daisy <- daisy(reproductive_results, metric = "euclidean")
+reproductive_daisy_nowater <- daisy(reproductive_results[,-c(14)], metric = "euclidean")
+reproductive_daisy_matrix <- as.matrix(reproductive_daisy)
+
+
+# PERMANOVA 
+vegetative_permanova <- adonis2(vegetative_daisy_matrix ~ Species/Sample.source, data = data_for_vegetative)
+print(vegetative_permanova)
+reproductive_permanova <- adonis2(reproductive_daisy_matrix ~ Species/Sample.source, data = data_for_reproductive)
+print(reproductive_permanova)
+```
+
+
+
+## Color coding of strains
+Create color palette for all strains per species
+
+```{r}
+# Sort dataframe by Species
+virdis_data <- filtered_Data %>%
+  arrange(Sample.source) %>%
+  #filter(!(Species.Code %in% c("Control", NA)))
+  filter(!(Species.Code %in% c("Control", "Aus", "Ppo", NA)))
+
+# Create unique color for strains
+num_colors <- length(unique(virdis_data$Sample.source))
+strain_colors <- viridis::viridis_pal(begin = 0.25, end = 0.9, option = "plasma")(num_colors)
+
+# Step 2: Create a named vector of colors for Sample.source
+unique_sources <- unique(virdis_data$Sample.source)
+names(strain_colors) <- unique_sources
+
+# Create unique color for traits
+#num_colors <- length(unique(trait_ranges$Trait))
+#trait_colors <- viridis::viridis_pal(begin = 0.05, end = 0.9, option = "turbo")(num_colors)
+
+# Step 2: Create a named vector of colors for Sample.source
+#unique_sources <- unique(trait_ranges$Trait)
+#names(trait_colors) <- unique_sources
+
+
+
+# Filter out 'Control' and NA from Species
+virdis_data <- filtered_Data %>%
+  filter(!(Species %in% c("Control", NA))) %>%
+  arrange(Species, Sample.source)
+
+# Get unique species and color options
+unique_species <- unique(virdis_data$Species)
+color_options <- c("magma", "cividis", "mako", "viridis", "inferno", "plasma")
+
+# Initialize an empty list to store color vectors
+species_color_vectors <- list()
+
+# Loop through each species to create a color vector for its Sample.source
+for (i in seq_along(unique_species)) {
+  species <- unique_species[i]
+  
+  # Subset data for the species
+  species_data <- filter(virdis_data, Species == species)
+  
+  # Determine the number of unique Sample.source within this species
+  num_colors <- length(unique(species_data$Sample.source))
+  
+  # Choose a color option, cycling through color_options if necessary
+  color_option <- color_options[(i - 1) %% length(color_options) + 1]
+  
+  # Generate color palette
+  strain_colors <- viridis::viridis_pal(begin = 0.35, end = 0.85, option = color_option)(num_colors)
+  
+  # Create a named vector of colors for Sample.source within this species
+  unique_sources <- unique(species_data$Sample.source)
+  names(strain_colors) <- unique_sources
+  
+  # Store the color vector in the list, named by the species
+  species_color_vectors[[species]] <- strain_colors
+}
+
+# Combine all species' color vectors into a single named vector
+all_strain_colors <- unlist(species_color_vectors, use.names = TRUE)
+```
+
+## Raincloud plot ggrain - test on a single trait
+```{r}
+plot_test <- ggplot(filtered_Data[!(filtered_Data$Species %in% c("Control", "Ppo", NA)), ], aes(x=Species, y=Flush1Time_to_Mature)) +
+  geom_rain(alpha = .5, point.args = list(alpha = 0), 
+            boxplot.args = list(alpha = 0, color = "white", outlier.shape = NA), 
+            violin.args = list(aes(fill = Species), alpha = 0.8),
+            violin.args.pos = list(
+              side = "r",
+              width = 0.7, position = position_nudge(x = 0.26))) +
+  geom_boxplot(aes(group=Sample.source, color = Sample.source), outlier.shape = NA, alpha = .4, width = .5, position = position_dodge(width = 0.45)) + 
+  geom_point(aes(color = Sample.source), position = position_dodge(width = 0.45), size = .8) +
+  scale_fill_manual(values = SpeciesColorsPul) +
+  scale_color_manual(values = all_strain_colors) +
+  guides(color = FALSE) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  #ggplot2::ylim(0, 10)
+  scale_y_continuous(limits = c(0, 10), breaks = seq(0, 10, by = 1))
+
+print(plot_test, dpi = 300)
+```
+
+
+## Facetplots violin with raincloud - vegetative traits
+```{r}
+# Assuming filtered_Data is your original dataframe
+vegetative_plots_data <- filtered_Data[!apply(is.na(filtered_Data[vegetative_traits]), 1, any), ] # remove any rows with NAs
+
+# Calculate the number of unique Sample.source for each Species
+species_counts_veg <- aggregate(Sample.source ~ Species, data = vegetative_plots_data, FUN = function(x) length(unique(as.character(x))))
+names(species_counts_veg)[2] <- "n"
+species_counts_veg$Species_label <- paste(specieslabels, "\n ( n =", species_counts_veg$n,")")
+
+
+# Reshape data to long format
+long_Data <- filtered_Data %>%
+  pivot_longer(cols = includeVegTraits, names_to = "Trait", values_to = "TraitValue") %>%
+  #pivot_longer(cols = includeTraitsWOcolour, names_to = "Trait", values_to = "TraitValue") %>%
+  filter(!(Species.Code %in% c("Control", NA))) 
+  #filter(!(Species %in% c("Control", "Aus", "Ppo", NA))) 
+
+# Rename traits in long_Data using includeVegTraits and includeVegTraits_Named
+trait_mapping <- setNames(includeVegTraits_Named, includeVegTraits)
+long_Data <- long_Data %>%
+  mutate(Trait = replace(Trait, Trait %in% names(trait_mapping), trait_mapping[Trait]))
+
+# Create a list to hold individual plots
+grob_list <- list()
+
+# Create individual plots for each trait
+traits <- unique(long_Data$Trait)
+for (trait in traits) {
+  plot <- ggplot(subset(long_Data, Trait == trait), aes(x = Species, y = TraitValue)) +
+    geom_rain(alpha = .5, adjust = 0.3, point.args = list(alpha = 0),
+              boxplot.args = list(alpha = 0, color = "white", outlier.shape = NA),
+              violin.args = list(aes(fill = Species), size = 0.1, alpha = 0.66, adjust = 0.77),
+              violin.args.pos = list(
+                side = "r",
+                width = 0.7, position = position_nudge(x = 0.22))) +
+    geom_line(aes(group = Sample.source, color = Sample.source), position = position_dodge(width = 0.35), alpha = 0.5) +
+    geom_point(aes(color = Sample.source), position = position_dodge(width = 0.35), size = 0.8, alpha = 0.5) +
+    scale_fill_manual(values = SpeciesColorsPul) +
+    scale_color_manual(values = all_strain_colors) +
+    scale_x_discrete(labels = species_counts_veg$Species_label) +
+    guides(color = FALSE) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 5),
+          axis.title.x = element_blank(),
+          axis.title.y = element_text(size = 9)) +
+    labs(y = trait)
+  
+  grob_list[[trait]] <- plot
+}
+
+# Arrange the plots side by side using grid.arrange
+grid.arrange(grobs = grob_list, ncol = 3)
+
+# Arrange the plots side by side using grid.arrange and save as PNG
+png(filename = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/finalplots/plot_facet_rain_veg_2Pul.png", 
+    width = 9, height = 3, units = "in", res = 300, bg = "white")
+grid.arrange(grobs = grob_list, ncol = 3)
+dev.off()
+
+```
+#### Raincloud with CLD
+```{r}
+# Assuming filtered_Data is your original dataframe
+vegetative_plots_data <- filtered_Data[!apply(is.na(filtered_Data[vegetative_traits]), 1, any), ] # remove any rows with NAs
+
+# Calculate the number of unique Sample.source for each Species
+species_counts_veg <- aggregate(Sample.source ~ Species, data = vegetative_plots_data, FUN = function(x) length(unique(as.character(x))))
+names(species_counts_veg)[2] <- "n"
+species_counts_veg$Species_label <- paste(specieslabels, "\n ( n =", species_counts_veg$n,")")
+
+# Reshape data to long format
+long_Data <- filtered_Data %>%
+  pivot_longer(cols = includeVegTraits, names_to = "Trait", values_to = "TraitValue") %>%
+  #pivot_longer(cols = includeTraitsWOcolour, names_to = "Trait", values_to = "TraitValue") %>%
+  filter(!(Species %in% c("Control", NA))) 
+  #filter(!(Species %in% c("Control", "Aus", "Ppo", NA))) 
+
+# Rename traits in long_Data using includeVegTraits and includeVegTraits_Named
+trait_mapping <- setNames(includeVegTraits_Named, includeVegTraits)
+long_Data <- long_Data %>%
+  mutate(Trait = factor(replace(Trait, Trait %in% names(trait_mapping), trait_mapping[Trait]), levels = includeVegTraits_Named))
+
+# Perform the statistical test (ANOVA and Tukey HSD in this case)
+aov_results <- long_Data %>%
+  group_by(Trait) %>%
+  summarise(tukey = list(TukeyHSD(aov(TraitValue ~ Species))))
+
+# Function to calculate compact letter displays for each trait
+calculate_cld <- function(tukey_result) {
+  tukey_diff <- tukey_result$Species[, "diff"]
+  tukey_p_adj <- tukey_result$Species[, "p adj"]
+  names(tukey_diff) <- rownames(tukey_result$Species)
+  names(tukey_p_adj) <- rownames(tukey_result$Species)
+  
+  comparison_matrix <- matrix(NA, nrow = length(unique(unlist(strsplit(names(tukey_diff), "-")))), ncol = length(unique(unlist(strsplit(names(tukey_diff), "-")))))
+  rownames(comparison_matrix) <- unique(unlist(strsplit(names(tukey_diff), "-")))
+  colnames(comparison_matrix) <- unique(unlist(strsplit(names(tukey_diff), "-")))
+  
+  for (i in seq_along(tukey_diff)) {
+    comparison <- strsplit(names(tukey_diff)[i], "-")[[1]]
+    comparison_matrix[comparison[1], comparison[2]] <- tukey_p_adj[i]
+    comparison_matrix[comparison[2], comparison[1]] <- tukey_p_adj[i]
+  }
+  
+  cld <- multcompLetters(comparison_matrix, threshold = 0.05)$Letters
+  cld <- as.data.frame(cld)
+  cld$Species <- rownames(cld)
+  rownames(cld) <- NULL
+  return(cld)
+}
+
+# Initialize an empty dataframe to store all CLDs
+all_clds <- data.frame()
+
+# Loop through each trait and calculate CLDs
+for (i in 1:nrow(aov_results)) {
+  cld <- calculate_cld(aov_results$tukey[[i]])
+  cld$Trait <- aov_results$Trait[i]
+  all_clds <- rbind(all_clds, cld)
+}
+
+# Merge the CLD data with the main data
+long_Data <- long_Data %>%
+  left_join(all_clds, by = c("Trait", "Species"))
+
+long_Data$Species <- factor(long_Data$Species, levels = ColorLevelsPul)
+
+# Create a list to hold individual plots
+grob_list <- list()
+
+# Create individual plots for each trait
+traits <- unique(long_Data$Trait)
+for (i in seq_along(traits)) {
+  trait <- traits[i]
+  trait_data <- subset(long_Data, Trait == trait)
+  lowest_y_value <- min(trait_data$TraitValue, na.rm = TRUE)
+  y_position <- lowest_y_value * 0.9
+  
+  plot <- ggplot(subset(long_Data, Trait == trait), aes(x = Species, y = TraitValue)) +
+    geom_rain(alpha = .5, adjust = 0.3, point.args = list(alpha = 0),
+              boxplot.args = list(alpha = 0, color = "white", outlier.shape = NA),
+              violin.args = list(aes(fill = Species), size = 0.1, alpha = 0.66, adjust = 0.77),
+              violin.args.pos = list(
+                side = "r",
+                width = 0.7, position = position_nudge(x = 0.22))) +
+    geom_line(aes(group = Sample.source, color = Sample.source), position = position_dodge(width = 0.35), alpha = 0.5) +
+    geom_point(aes(color = Sample.source), position = position_dodge(width = 0.35), size = 0.8, alpha = 0.5) +
+    geom_text(aes(label = cld, y = y_position), size = 3) + # Add CLD labels 
+    scale_fill_manual(values = SpeciesColorsPul) +
+    scale_color_manual(values = all_strain_colors) +
+    scale_x_discrete(labels = species_counts_veg$Species_label) +
+    guides(color = FALSE) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 6),
+          axis.title.x = element_blank(),
+          axis.title.y = element_text(size = 8)) +
+    labs(y = trait)
+  
+  # Add an uppercase letter annotation to each plot
+  plot <- plot + annotate("text", x = -Inf, y = Inf, label = LETTERS[i], hjust = -0.5, vjust = 1.5, size = 6, fontface = "bold")
+  
+  grob_list[[i]] <- plot
+  #grob_list[[trait]] <- plot
+}
+
+# Arrange the plots side by side using grid.arrange
+grid.arrange(grobs = grob_list, ncol = 3)
+
+# Arrange the plots side by side using grid.arrange and save as PNG
+png(filename = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/finalplots/plot_facet_rain_veg_2Pul_CLD.png", 
+    width = 9, height = 3, units = "in", res = 300, bg = "white")
+grid.arrange(grobs = grob_list, ncol = 3)
+dev.off()
+```
+
+
+## Facetplots violin with raincloud - reproductive traits
+```{r}
+# Assuming filtered_Data is your original dataframe
+reproductive_plots_data <- filtered_Data[!apply(is.na(filtered_Data[includeReprTraits]), 1, any), ] # remove any rows with NAs
+
+# Calculate the number of unique Sample.source for each Species
+species_counts_repr <- aggregate(Sample.source ~ Species, data = reproductive_plots_data, FUN = function(x) length(unique(as.character(x))))
+names(species_counts_repr)[2] <- "n"
+species_counts_repr$Species_label <- paste(specieslabelsRepr, "\n ( n =", species_counts_repr$n,")")
+
+# Reshape data to long format
+long_Data <- filtered_Data %>%
+  pivot_longer(cols = includeReprTraits, names_to = "Trait", values_to = "TraitValue") %>%
+  #pivot_longer(cols = includeTraitsWOcolour, names_to = "Trait", values_to = "TraitValue") %>%
+  #filter(!(Species %in% c("Control", NA))) # Applying your existing filter
+  filter(!(Species %in% c("Control", "Aus", "Ppo", NA))) # Applying your existing filter
+
+# Update plot code to use the reshaped data
+plot_facet_repr <- ggplot(long_Data, aes(x = Species, y = TraitValue)) +
+  geom_rain(alpha = .5, adjust = 0.3, point.args = list(alpha = 0), 
+            boxplot.args = list(alpha = 0, color = "white", outlier.shape = NA), 
+            violin.args = list(aes(fill = Species), size = 0.1, alpha = 0.66, adjust = 0.77),
+            violin.args.pos = list(
+              side = "r",
+              width = 0.7, position = position_nudge(x = 0.22))) +
+  #geom_boxplot(aes(group=Sample.source, color = Sample.source), outlier.shape = NA, alpha = .7, width = .5) +
+  geom_line(aes(group = Sample.source, color = Sample.source), position = position_dodge(width = 0.35), alpha = 0.5) +
+  #geom_point(aes(color = Sample.source), position = position_jitter(width = .15), size = .8) +
+  geom_point(aes(color = Sample.source), position = position_dodge(width = 0.35), size = .8, alpha = 0.5) +
+  scale_fill_manual(values = SpeciesColorsPul) +
+  scale_color_manual(values = all_strain_colors) +
+  scale_x_discrete(labels = species_counts_repr$Species_label) +
+  facet_wrap(~Trait, scales = "free", shrink = TRUE, ncol = 3) + # Set max of 3 rows of graphs
+  guides(color = FALSE) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5))  
+
+# Print the plot
+print(plot_facet_repr)
+
+ggsave(filename = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.facet_rain_repr_2Pul.png", plot = plot_facet_repr, width = 10, height = 12, dpi = 300, bg = "white")
+#ggsave(filename = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.facet_rain_scaled.png", plot = plot_facet_repr, width = 10, height = 12, dpi = 300, bg = "white")
+```
+#### Raincloud with CLD grob
+```{r}
+# Assuming filtered_Data is your original dataframe
+reproductive_plots_data <- filtered_Data[!apply(is.na(filtered_Data[reproductive_traits]), 1, any), ] # remove any rows with NAs
+
+# Calculate the number of unique Sample.source for each Species
+species_counts_repr <- aggregate(Sample.source ~ Species, data = reproductive_plots_data, FUN = function(x) length(unique(as.character(x))))
+names(species_counts_repr)[2] <- "n"
+species_counts_repr$Species_label <- paste(specieslabelsRepr, "\n ( n =", species_counts_repr$n,")")
+
+# Reshape data to long format
+long_Data <- filtered_Data %>%
+  pivot_longer(cols = includeReprTraits, names_to = "Trait", values_to = "TraitValue") %>%
+  #pivot_longer(cols = includeTraitsWOcolour, names_to = "Trait", values_to = "TraitValue") %>%
+  #filter(!(Species %in% c("Control", NA))) # Applying your existing filter
+  filter(!(Species %in% c("Control", "Aus", "Ppo", NA))) # Applying your existing filter
+
+# Rename traits in long_Data using includeVegTraits and includeVegTraits_Named
+trait_mapping <- setNames(includeReprTraits_Named, includeReprTraits)
+long_Data <- long_Data %>%
+  mutate(Trait = replace(Trait, Trait %in% names(trait_mapping), trait_mapping[Trait]))
+
+# Perform the statistical test (ANOVA and Tukey HSD in this case)
+aov_results <- long_Data %>%
+  group_by(Trait) %>%
+  summarise(tukey = list(TukeyHSD(aov(TraitValue ~ Species))))
+
+# Function to calculate compact letter displays for each trait
+calculate_cld <- function(tukey_result) {
+  tukey_diff <- tukey_result$Species[, "diff"]
+  tukey_p_adj <- tukey_result$Species[, "p adj"]
+  names(tukey_diff) <- rownames(tukey_result$Species)
+  names(tukey_p_adj) <- rownames(tukey_result$Species)
+  
+  comparison_matrix <- matrix(NA, nrow = length(unique(unlist(strsplit(names(tukey_diff), "-")))), ncol = length(unique(unlist(strsplit(names(tukey_diff), "-")))))
+  rownames(comparison_matrix) <- unique(unlist(strsplit(names(tukey_diff), "-")))
+  colnames(comparison_matrix) <- unique(unlist(strsplit(names(tukey_diff), "-")))
+  
+  for (i in seq_along(tukey_diff)) {
+    comparison <- strsplit(names(tukey_diff)[i], "-")[[1]]
+    comparison_matrix[comparison[1], comparison[2]] <- tukey_p_adj[i]
+    comparison_matrix[comparison[2], comparison[1]] <- tukey_p_adj[i]
+  }
+  
+  cld <- multcompLetters(comparison_matrix, threshold = 0.05)$Letters
+  cld <- as.data.frame(cld)
+  cld$Species <- rownames(cld)
+  rownames(cld) <- NULL
+  return(cld)
+}
+
+# Initialize an empty dataframe to store all CLDs
+all_clds <- data.frame()
+
+# Loop through each trait and calculate CLDs
+for (i in 1:nrow(aov_results)) {
+  cld <- calculate_cld(aov_results$tukey[[i]])
+  cld$Trait <- aov_results$Trait[i]
+  all_clds <- rbind(all_clds, cld)
+}
+
+# Merge the CLD data with the main data
+long_Data <- long_Data %>%
+  left_join(all_clds, by = c("Trait", "Species"))
+
+long_Data$Species <- factor(long_Data$Species, levels = ColorLevelsPul)
+
+# Create a list to hold individual plots
+grob_list <- list()
+
+# Create individual plots for each trait
+traits <- unique(long_Data$Trait)
+for (i in seq_along(traits)) {
+  trait <- traits[i]
+  trait_data <- subset(long_Data, Trait == trait)
+  lowest_y_value <- min(trait_data$TraitValue, na.rm = TRUE)
+  y_position <- lowest_y_value * 0.9
+  
+  plot <- ggplot(subset(long_Data, Trait == trait), aes(x = Species, y = TraitValue)) +
+    geom_rain(alpha = .5, adjust = 0.3, point.args = list(alpha = 0),
+              boxplot.args = list(alpha = 0, color = "white", outlier.shape = NA),
+              violin.args = list(aes(fill = Species), size = 0.1, alpha = 0.66, adjust = 0.77),
+              violin.args.pos = list(
+                side = "r",
+                width = 0.7, position = position_nudge(x = 0.22))) +
+    geom_line(aes(group = Sample.source, color = Sample.source), position = position_dodge(width = 0.35), alpha = 0.5) +
+    geom_point(aes(color = Sample.source), position = position_dodge(width = 0.35), size = 0.8, alpha = 0.5) +
+    geom_text(aes(label = cld, y = y_position), size = 3) + # Add CLD labels 
+    scale_fill_manual(values = SpeciesColorsPul) +
+    scale_color_manual(values = all_strain_colors) +
+    scale_x_discrete(labels = species_counts_veg$Species_label) +
+    guides(color = FALSE) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 5),
+          axis.title.x = element_blank(),
+          axis.title.y = element_text(size = 9)) +
+    labs(y = trait)
+    # Add an uppercase letter annotation to each plot
+  plot <- plot + annotate("text", x = -Inf, y = Inf, label = LETTERS[i], hjust = -0.5, vjust = 1.5, size = 6, fontface = "bold")
+  
+  grob_list[[i]] <- plot
+  #grob_list[[trait]] <- plot
+}
+
+# Arrange the plots side by side using grid.arrange
+grid.arrange(grobs = grob_list, ncol = 3)
+
+# Arrange the plots side by side using grid.arrange and save as PNG
+png(filename = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/finalplots/plot_facet_rain_repr_2Pul_CLD.png", 
+    width = 10, height = 12, units = "in", res = 300, bg = "white")
+grid.arrange(grobs = grob_list, ncol = 3)
+dev.off()
+```
+
+
+
+## Individual trait significance tests for results claims
+
+### Levene's test for vegetative and reproductive traits
+```{r}
+# vegetative traits
+# Reshape data to long format
+vegetative_long <- vegetative_plots_data %>%
+  pivot_longer(cols = all_of(includeVegTraits), names_to = "Trait", values_to = "TraitValue") %>%
+  #pivot_longer(cols = includeTraitsWOcolour, names_to = "Trait", values_to = "TraitValue") %>%
+  filter(!(Species.Code %in% c("Control", NA))) 
+  #filter(!(Species %in% c("Control", "Aus", "Ppo", NA))) 
+
+# Get unique traits
+unique_traits <- unique(vegetative_long$Trait)
+
+# Initialize a list to store results
+veg_levene_test_results <- list()
+
+# Loop through each trait and perform Levene's test
+for (trait in unique_traits) {
+  # Subset the dataframe for the current trait
+  trait_data <- subset(vegetative_long, Trait == trait)
+  
+  # Perform Levene's test
+  levene_test <- leveneTest(TraitValue ~ Species, data = trait_data)
+  
+  # Store the result in the list
+  veg_levene_test_results[[trait]] <- levene_test
+}
+
+# Print results
+veg_levene_test_results
+
+# reproductive traits
+# Reshape data to long format
+reproductive_long <- reproductive_plots_data %>%
+  pivot_longer(cols = all_of(includeReprTraits), names_to = "Trait", values_to = "TraitValue") %>%
+  #pivot_longer(cols = includeTraitsWOcolour, names_to = "Trait", values_to = "TraitValue") %>%
+  filter(!(Species %in% c("Control", "Aus", "Ppo", NA))) 
+
+# Get unique traits
+unique_traits <- unique(reproductive_long$Trait)
+
+# Initialize a list to store results
+repr_levene_test_results <- list()
+
+# Loop through each trait and perform Levene's test
+for (trait in unique_traits) {
+  # Subset the dataframe for the current trait
+  trait_data <- subset(reproductive_long, Trait == trait)
+  
+  # Perform Levene's test
+  levene_test <- leveneTest(TraitValue ~ Species, data = trait_data)
+  
+  # Store the result in the list
+  repr_levene_test_results[[trait]] <- levene_test
+}
+
+# Print results
+repr_levene_test_results
+```
+
+### ANOVA on species means
+```{r}
+# Vegetative traits
+# Get unique traits
+unique_traits <- unique(vegetative_long$Trait)
+
+# Initialize a list to store ANOVA results
+anova_results <- list()
+
+# Loop through each trait and perform ANOVA
+for (trait in unique_traits) {
+  # Subset the dataframe for the current trait
+  trait_data <- vegetative_long %>%
+    filter(Trait == trait)
+  
+  # Perform ANOVA
+  anova_result <- aov(TraitValue ~ Species, data = trait_data)
+  
+  # Store the result in the list
+  anova_results[[trait]] <- summary(anova_result)
+}
+
+# Print results
+anova_results
+
+# Reproductive traits
+# Get unique traits
+unique_traits <- unique(reproductive_long$Trait)
+
+# Initialize a list to store ANOVA results
+repr_anova_results <- list()
+
+# Loop through each trait and perform ANOVA
+for (trait in unique_traits) {
+  # Subset the dataframe for the current trait
+  trait_data <- reproductive_long %>%
+    filter(Trait == trait)
+  
+  # Perform ANOVA
+  anova_result <- aov(TraitValue ~ Species, data = trait_data)
+  
+  # Store the result in the list
+  repr_anova_results[[trait]] <- summary(anova_result)
+}
+
+# Print results
+repr_anova_results
+```
+
+### Tukey pairwise test
+```{r}
+#Vegetative traits
+unique_traits <- unique(vegetative_long$Trait)
+
+# Initialize a list to store Tukey's HSD results
+vegetative_tukey_results <- list()
+
+# Loop through each trait and perform Tukey's HSD test
+for (trait in unique_traits) {
+  # Subset the dataframe for the current trait
+  trait_data <- vegetative_long %>%
+    filter(Trait == trait)
+  
+  # Perform ANOVA
+  anova_result <- aov(TraitValue ~ Species, data = trait_data)
+  
+  # Perform Tukey's HSD test
+  tukey_result <- TukeyHSD(anova_result)
+  
+  # Store the result in the list
+  vegetative_tukey_results[[trait]] <- tukey_result
+}
+
+# Print results for each trait
+vegetative_tukey_results
+
+#reproductive traits
+unique_traits <- unique(reproductive_long$Trait)
+
+# Initialize a list to store Tukey's HSD results
+reproductive_tukey_results <- list()
+
+# Loop through each trait and perform Tukey's HSD test
+for (trait in unique_traits) {
+  # Subset the dataframe for the current trait
+  trait_data <- reproductive_long %>%
+    filter(Trait == trait)
+  
+  # Perform ANOVA
+  anova_result <- aov(TraitValue ~ Species, data = trait_data)
+  
+  # Perform Tukey's HSD test
+  tukey_result <- TukeyHSD(anova_result)
+  
+  # Store the result in the list
+  reproductive_tukey_results[[trait]] <- tukey_result
+}
+
+# Print results for each trait
+reproductive_tukey_results
+```
+
+### Correlation water content and hardness
+```{r}
+# Checking normality (Shapiro-Wilk test)
+shapiro.test(filtered_Data$Flush1_Hardness)
+shapiro.test(filtered_Data$Flush1Fruitbody_water_content)
+
+# Pearson correlation test
+cor.test(filtered_Data$Flush1_Hardness, filtered_Data$Flush1Fruitbody_water_content, method = "kendall")
+
+# Scatter plot
+plot(filtered_Data$Flush1_Hardness, filtered_Data$Flush1Fruitbody_water_content, main = "Scatter plot of Hardness vs Water Content",
+     xlab = "Hardness", ylab = "Water Content", pch = 19)
+abline(lm(Flush1Fruitbody_water_content ~ Flush1_Hardness, data = filtered_Data), col = "blue") # Add a linear regression line
+```
+
+```{r}
+# Assuming your data frame is named 'filtered_Data' and has a column 'Species'
+# Split data by species
+species_list <- c("Dja", "Pars", "Pul_NZ", "Pul_intl")
+
+# Initialize an empty data frame to store correlation results
+cor_results <- data.frame(Species = character(),
+                          Method = character(),
+                          Correlation = numeric(),
+                          P_value = numeric(),
+                          stringsAsFactors = FALSE)
+
+# Perform correlation test for each species and store the results
+for (species in species_list) {
+  species_data <- filtered_Data %>% filter(Species == paste0(species))
+  
+  # Checking normality
+  shapiro_hardness <- shapiro.test(species_data$Flush1_Hardness)
+  shapiro_water <- shapiro.test(species_data$Flush1Fruitbody_water_content)
+  
+  # Determine which correlation test to use based on normality
+  if (shapiro_hardness$p.value > 0.05 & shapiro_water$p.value > 0.05) {
+    # Use Pearson correlation
+    cor_test <- cor.test(species_data$Flush1_Hardness, species_data$Flush1Fruitbody_water_content, method = "pearson")
+    method_used <- "Pearson"
+  } else {
+    # Use Spearman correlation
+    cor_test <- cor.test(species_data$Flush1_Hardness, species_data$Flush1Fruitbody_water_content, method = "spearman")
+    method_used <- "Spearman"
+  }
+  
+  # Store the results in the data frame
+  cor_results <- rbind(cor_results, data.frame(Species = species,
+                                               Method = method_used,
+                                               Correlation = cor_test$estimate,
+                                               P_value = cor_test$p.value))
+}
+
+# Print correlation results
+print(cor_results)
+
+# Plotting the data
+ggplot(filtered_Data, aes(x = Flush1_Hardness, y = Flush1Fruitbody_water_content, color = Species)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Scatter plot of Hardness vs Water Content by Species",
+       x = "Hardness",
+       y = "Water Content") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+```
+
+# Hypothesis 1: vegetative vs reproductive
+
+
+### Variance components and confidence intervals of each trait
+```{r}
+# Initialize data frames to store results
+results_CI_veg <- data.frame(Trait = character(), Within_species_variance_CI = character(), stringsAsFactors = FALSE)
+results_CI_repr <- data.frame(Trait = character(), Within_species_variance_CI = character(), stringsAsFactors = FALSE)
+
+# Function to calculate confidence intervals
+calculate_ci <- function(variance, n, A, B) {
+  lower_bound <- ((n - 1) * variance) / B
+  upper_bound <- ((n - 1) * variance) / A
+  return(c(lower_bound, upper_bound))
+}
+
+# Loop over each trait for vegetative dataset
+for(trait in includeVegTraits) {
+  formula <- as.formula(paste(trait, "~ (1 | Species/Sample.source) + (1 | shelf * level)"))
+  
+  model <- glmmTMB(formula, data = data_for_vegetative, family = gaussian())
+  
+  # Extract the variance components
+  var_components <- VarCorr(model)
+  
+  # Within-species variance (Sample.source:Species)
+  var_within_species <- var_components$cond$`Sample.source:Species`["(Intercept)", "(Intercept)"]
+  
+  # Extract the residual variance
+  residual_variance <- sigma(model)^2
+  
+  # Extract other variance components and sum them up
+  other_variances <- sapply(var_components$cond, function(x) x[1, 1])
+  var_total <- sum(other_variances) + residual_variance
+  
+  # Calculate relative within-species variance
+  relative_within_species_variance <- var_within_species / var_total
+  
+  # Calculate degrees of freedom
+  df <- length(unique(data_for_vegetative$Sample.source))
+  
+  # Confidence level
+  alpha <- 0.05
+  
+  # Chi-squared critical values
+  A <- qchisq(alpha / 2, df = df - 1)
+  B <- qchisq(1 - alpha / 2, df = df - 1)
+  
+  # Calculate confidence intervals for the relative variance component
+  ci <- calculate_ci(relative_within_species_variance, df, A, B)
+  ci_lower <- ci[1]
+  ci_upper <- ci[2]
+  
+  # Create a result string
+  ci_string <- paste0(round(relative_within_species_variance, 4), " (", round(ci_lower, 4), " - ", round(ci_upper, 4), ")")
+  
+  # Add to results data frame
+  results_CI_veg <- rbind(results_CI_veg, data.frame(Trait = trait, Within_species_variance_CI = ci_string, stringsAsFactors = FALSE))
+}
+
+# Loop over each trait for reproductive dataset
+for(trait in includeReprTraits) {
+  formula <- as.formula(paste(trait, "~ (1 | Species/Sample.source) + (1 | shelf * level)"))
+  
+  model <- glmmTMB(formula, data = data_for_reproductive, family = gaussian())
+  
+  # Extract the variance components
+  var_components <- VarCorr(model)
+  
+  # Within-species variance (Sample.source:Species)
+  var_within_species <- var_components$cond$`Sample.source:Species`["(Intercept)", "(Intercept)"]
+  
+  # Extract the residual variance
+  residual_variance <- sigma(model)^2
+  
+  # Extract other variance components and sum them up
+  other_variances <- sapply(var_components$cond, function(x) x[1, 1])
+  var_total <- sum(other_variances) + residual_variance
+  
+  # Calculate relative within-species variance
+  relative_within_species_variance <- var_within_species / var_total
+  
+  # Calculate degrees of freedom
+  df <- length(unique(data_for_reproductive$Sample.source))
+  
+  # Confidence level
+  alpha <- 0.05
+  
+  # Chi-squared critical values
+  A <- qchisq(alpha / 2, df = df - 1)
+  B <- qchisq(1 - alpha / 2, df = df - 1)
+  
+  # Calculate confidence intervals for the relative variance component
+  ci <- calculate_ci(relative_within_species_variance, df, A, B)
+  ci_lower <- ci[1]
+  ci_upper <- ci[2]
+  
+  # Create a result string
+  ci_string <- paste0(round(relative_within_species_variance, 4), " (", round(ci_lower, 4), " - ", round(ci_upper, 4), ")")
+  
+  # Add to results data frame
+  results_CI_repr <- rbind(results_CI_repr, data.frame(Trait = trait, Within_species_variance_CI = ci_string, stringsAsFactors = FALSE))
+}
+
+# Print the results
+print(results_CI_veg)
+print(results_CI_repr)
+```
+
+
+```{r}
+
+# Combine veg and repr results
+combined_results <- bind_rows(results_CI_veg, results_CI_repr)
+
+# Separate the variance and confidence intervals into separate columns
+combined_results <- combined_results %>%
+  mutate(Within_species_variance = as.numeric(gsub(" .*", "", Within_species_variance_CI)),
+         CI_lower = as.numeric(gsub(".*\\((.*) -.*", "\\1", Within_species_variance_CI)),
+         CI_upper = as.numeric(gsub(".*- (.*)\\)", "\\1", Within_species_variance_CI)))
+
+# Create the scatterplot
+ggplot(combined_results, aes(x = Trait, y = Within_species_variance)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2) +
+  labs(title = "Within-species Variance with Confidence Intervals",
+       x = "Trait",
+       y = "Within-species Variance") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+## PCA - reproductive traits
+```{r}
+# Dataframe with reproductive observations, no categorical variables, removing rows with NAs
+#data_for_reproductive_numeric <- na.omit(data_for_reproductive[, c(11:16, 19:26)])
+data_for_reproductive_numeric <- na.omit(data_for_reproductive[, includeReprTraits])
+#data_for_reproductive_numeric <- na.omit(data_for_reproductive)
+
+standardized.reproductive <- decostand(data_for_reproductive_numeric[, -c(6)], method = "standardize")
+pca_reproductive <- prcomp(standardized.reproductive, scale=T)
+print(biplot(pca_reproductive))
+summary(pca_reproductive)
+
+# Extract the loadings
+loadings_matrix <- pca_reproductive$rotation
+
+# Calculate the magnitude of loadings for each variable 
+loadings_magnitude <- sqrt(rowSums(loadings_matrix^2))
+
+# Identify the 6 most prominent variables
+top_6_vars <- names(sort(loadings_magnitude, decreasing = TRUE)[1:6])
+
+# Subset the PCA object to keep only the top 6 variables
+pca_reproductive$rotation <- loadings_matrix[top_6_vars, ]
+
+# Now, plot the biplot
+biplot(pca_reproductive)
+```
+
+## PCA - vegetative traits
+```{r}
+# Dataframe with reproductive observations, no categorical variables, removing rows with NAs
+#data_for_vegetative_numeric <- na.omit(data_for_vegetative[, c(10, 17, 18)])
+data_for_vegetative_numeric <- na.omit(data_for_vegetative[, includeVegTraits])
+
+standardized.vegetative <- decostand(data_for_vegetative_numeric, method = "standardize")
+pca_vegetative <- prcomp(standardized.vegetative, scale=T)
+print(biplot(pca_vegetative))
+summary(pca_vegetative)
+```
+
+## Variance components using glmmTMB
+### Function for extracting variance from glmmTMB models
+```{r}
+glmm_var <- function(model, number_of_terms) { #specify number of random effects terms (usually 3 for my data)
+  model_variance <- glmmTMB::VarCorr(model) #extract variance components from model
+    df <- data.frame(name = rep(NA, number_of_terms + 1),
+                   variance = rep(NA, number_of_terms + 1)) # create empty dataframe with i rows
+  for (i in 1:number_of_terms) {
+    category <- names(model_variance$cond)[i] # extract name of category of variance
+    #print(paste("Category:", category))  # Added for debugging
+    df[i, 1] <- category
+    df[(i+1), 1] <- "Residual"
+    value <- model_variance$cond[[category]][1] # extract value of variance for i-th category
+    #print(paste("Value:", value))  # Added for debugging
+    df[i, 2] <- value
+    df[(i+1), 2] <- attr(model_variance$cond, "sc")^2 # Residual Variance
+    #print(paste("Residual Variance for row", (i+1), ":", df[(i+1), 2])) # Echo back the value
+
+  }
+  return(df)
+}
+
+# Function to calculate absolute and relative variances
+glmm_varcomp <- function(model, number_of_terms) { 
+  # Extract variance components from model
+  model_variance <- glmmTMB::VarCorr(model) 
+
+  # Create empty dataframe with appropriate rows
+  df <- data.frame(name = rep(NA, number_of_terms + 1),
+                   variance = rep(NA, number_of_terms + 1),
+                   varcomp = rep(NA, number_of_terms + 1)) 
+
+  # Calculate absolute variances
+  for (i in 1:number_of_terms) {
+    category <- names(model_variance$cond)[i] 
+    df[i, 1] <- category 
+    df[(i + 1), 1] <- "Residual"
+    value <- model_variance$cond[[category]][1]  
+    df[i, 2] <- value 
+    df[(i + 1), 2] <- attr(model_variance$cond, "sc")^2 
+  }
+
+  # Calculate relative variances
+  df$varcomp <- df$variance / sum(df$variance)
+
+  return(df)
+}
+
+  
+# Function to calculate relative variances
+relative_variance <- function(data) {
+  model_variance <- data
+# Loop through each column in the dataframe
+for (col_name in names(model_variance)) {
+  # Check if the column is numeric
+  if (is.numeric(model_variance[[col_name]])) {
+    # Normalize the column by dividing each value by the sum of the column, handling NA values
+    model_variance[[col_name]] <- model_variance[[col_name]] / sum(model_variance[[col_name]], na.rm = TRUE)
+  }
+
+}
+  # View the updated dataframe
+return(model_variance)
+
+}
+```
+
+
+### PCA variance components
+```{r}
+## One Pul species
+vegetative_pcoa1_glmmTMB <- glmmTMB(pca_vegetative$x[,1] ~ (1 | Species.Code/Sample.source) + (1 | shelfxlevel), data = data_for_vegetative, family = gaussian())
+vegetative_pcoa1_varcomp <- format(glmm_varcomp(vegetative_pcoa1_glmmTMB,3), scientific = F) #extract variance components, absolute and relative
+vegetative_pcoa2_glmmTMB <- glmmTMB(pca_vegetative$x[,2] ~ (1 | Species.Code/Sample.source) + (1 | shelfxlevel), data = data_for_vegetative, family = gaussian())
+vegetative_pcoa2_varcomp <- format(glmm_varcomp(vegetative_pcoa2_glmmTMB,3), scientific = F)
+
+reproductive_pcoa1_glmmTMB <- glmmTMB(pca_reproductive$x[,1] ~ (1 | Species.Code/Sample.source) + (1 | shelfxlevel), data = data_for_reproductive, family = gaussian())
+reproductive_pcoa1_varcomp <- format(glmm_varcomp(reproductive_pcoa1_glmmTMB,3), scientific = F)
+reproductive_pcoa2_glmmTMB <- glmmTMB(pca_reproductive$x[,2] ~ (1 | Species.Code/Sample.source) + (1 | shelfxlevel), data = data_for_reproductive, family = gaussian())
+reproductive_pcoa2_varcomp <- format(glmm_varcomp(reproductive_pcoa2_glmmTMB,3), scientific = F)
+
+### Varcomp summary (relative variances)
+PCoA_varcomp_summary <- vegetative_pcoa1_varcomp[, c(1,3)]
+names(PCoA_varcomp_summary)[names(PCoA_varcomp_summary) == "varcomp"] <- "vegetative_pcoa1"
+new_levels <- c("Between strains", "Between species", "Shelf effect", "Within strains")
+PCoA_varcomp_summary$name <- factor(new_levels, levels = new_levels)
+column_name <- "vegetative_pcoa2"
+PCoA_varcomp_summary[[column_name]] <- vegetative_pcoa2_varcomp[[3]] # Append the column to the new dataframe
+column_name <- "reproductive_pcoa1"
+PCoA_varcomp_summary[[column_name]] <- reproductive_pcoa1_varcomp[[3]] # Append the column to the new dataframe
+column_name <- "reproductive_pcoa2"
+PCoA_varcomp_summary[[column_name]] <- reproductive_pcoa2_varcomp[[3]] # Append the column to the new dataframe
+
+#####################################
+## Two Pul species
+Pul_vegetative_pcoa1_glmmTMB <- glmmTMB(pca_vegetative$x[,1] ~ (1 | Species/Sample.source) + (1 | shelf * level), data = data_for_vegetative, family = gaussian())
+Pul_vegetative_pcoa1_varcomp <- format(glmm_varcomp(Pul_vegetative_pcoa1_glmmTMB,5), scientific = F) #extract variance components, absolute and relative
+Pul_vegetative_pcoa2_glmmTMB <- glmmTMB(pca_vegetative$x[,2] ~ (1 | Species/Sample.source) + (1 | shelf * level), data = data_for_vegetative, family = gaussian())
+Pul_vegetative_pcoa2_varcomp <- format(glmm_varcomp(Pul_vegetative_pcoa2_glmmTMB,5), scientific = F)
+
+Pul_reproductive_pcoa1_glmmTMB <- glmmTMB(pca_reproductive$x[,1] ~ (1 | Species/Sample.source) + (1 | shelf * level), data = data_for_reproductive, family = gaussian())
+Pul_reproductive_pcoa1_varcomp <- format(glmm_varcomp(Pul_reproductive_pcoa1_glmmTMB,5), scientific = F)
+Pul_reproductive_pcoa2_glmmTMB <- glmmTMB(pca_reproductive$x[,2] ~ (1 | Species/Sample.source) + (1 | shelf * level), data = data_for_reproductive, family = gaussian())
+Pul_reproductive_pcoa2_varcomp <- format(glmm_varcomp(Pul_reproductive_pcoa2_glmmTMB,5), scientific = F)
+
+### Varcomp summary (relative variances)
+Pul_PCoA_varcomp_summary <- Pul_vegetative_pcoa1_varcomp[, c(1,3)]
+names(Pul_PCoA_varcomp_summary)[names(Pul_PCoA_varcomp_summary) == "varcomp"] <- "vegetative_pc1"
+#new_levels <- c("Between strains", "Between species", "Shelf effect", "Within strains")
+#new_levels <- c("Between strains", "Between species", "Shelf effect", "Level effect", "Shelf * level", "Water content", "Within strains")
+new_levels <- c("Between strains", "Between species", "Shelf effect", "Level effect", "Shelf × level", "Within strains")
+Pul_PCoA_varcomp_summary$name <- factor(new_levels, levels = new_levels)
+column_name <- "vegetative_pc2"
+Pul_PCoA_varcomp_summary[[column_name]] <- Pul_vegetative_pcoa2_varcomp[[3]] # Append the column to the new dataframe
+column_name <- "reproductive_pc1"
+Pul_PCoA_varcomp_summary[[column_name]] <- Pul_reproductive_pcoa1_varcomp[[3]] # Append the column to the new dataframe
+column_name <- "reproductive_pc2"
+Pul_PCoA_varcomp_summary[[column_name]] <- Pul_reproductive_pcoa2_varcomp[[3]] # Append the column to the new dataframe
+
+# Manually sort
+new_sorting <- rev(c("Between species", "Between strains", "Within strains", "Shelf × level", "Shelf effect", "Level effect"))
+Pul_PCoA_varcomp_summary$name <- factor(Pul_PCoA_varcomp_summary$name, levels = new_sorting)
+
+```
+
+
+#### Stacked barplots of variance components
+```{r}
+# color palette for chart
+colors_barplot <- c("#009E73", "#253998", "#FFEA97", "#44C3FF", "#a9d574", "#fa753c")
+
+## Two species
+PCA_varcomp_summary_long <- Pul_PCoA_varcomp_summary %>%
+  pivot_longer(cols = 2:5, names_to = "PCA", values_to = "value") %>%
+  mutate(value = as.numeric(value)) # Ensure 'value' is numeric
+
+colors_named <- setNames(colors_barplot, unique(PCA_varcomp_summary_long$name))
+
+# Now, create the stacked barplot
+plot_hyp1varcomp <- ggplot(PCA_varcomp_summary_long, aes(x = PCA, y = value, fill = name)) + 
+  geom_bar(stat = "identity", position = "stack") +
+  theme_minimal() +
+  scale_fill_manual(values = colors_named) +
+  labs(x = "PCA Analysis", 
+       y = "Relative variance", 
+       fill = "Variance component") +
+  theme(text = element_text(size = 10), axis.text.x = element_text(angle = 45, hjust = 0.8), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.title.x = element_blank())
+
+print(plot_hyp1varcomp)
+
+ggsave(filename = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/finalplots/plot.hyp1varcomp.png", plot = plot_hyp1varcomp, width = 3, height = 2, dpi = 300, bg = "white", scale = 2)
+```
+
+### Log likelihood ratio test
+```{r}
+## Comparing the full model against a reduced model, in which either Species or Strain is removed as a random effect 
+# Full model
+full_model <- glmmTMB(pca_reproductive$x[,1] ~ (1 | Species/Sample.source) + (1 | shelfxlevel), 
+                      data = data_for_reproductive, family = gaussian())
+
+# Reduced model (example: removing between-species variance)
+reduced_model <- glmmTMB(pca_reproductive$x[,1] ~ (1 | Species) + (1 | shelfxlevel), 
+                         data = data_for_reproductive, family = gaussian())
+
+# Likelihood ratio test
+print(anova(full_model, reduced_model))
+
+```
+
+#### Model comparison function to create table
+```{r}
+### Currently uses two Pul clades
+
+compare_models <- function(data, response_vars) {
+  # Initialize an empty data frame to store results
+  results <- data.frame(Response=character(),
+                        Model=character(),
+                        AIC_delta=numeric(),
+                        Chisq=numeric(),
+                        P=numeric(),
+                        stringsAsFactors=FALSE)
+
+  for (var in response_vars) {
+    # Full model
+    full_model_formula <- as.formula(paste0(var, " ~ (1 | Species/Sample.source) + (1 | shelfxlevel)"))
+    full_model <- glmmTMB(full_model_formula, data = data, family = gaussian())
+
+    # Reduced model 1: Sample.source only
+    reduced_model_1_formula <- as.formula(paste0(var, " ~ (1 | Sample.source) + (1 | shelfxlevel)"))
+    reduced_model_1 <- glmmTMB(reduced_model_1_formula, data = data, family = gaussian())
+
+    # Reduced model 2: Species.Code only
+    reduced_model_2_formula <- as.formula(paste0(var, " ~ (1 | Species) + (1 | shelfxlevel)"))
+    reduced_model_2 <- glmmTMB(reduced_model_2_formula, data = data, family = gaussian())
+
+    # Model comparison 1
+    comparison_1 <- anova(full_model, reduced_model_1)
+
+    # Model comparison 2
+    comparison_2 <- anova(full_model, reduced_model_2)
+
+    # Collect results directly, avoiding the use of `tidy()`
+    results <- rbind(results, 
+                     data.frame(Response = var,
+                                Model = "Strain only",
+                                AIC_delta = comparison_1$AIC[2] - comparison_1$AIC[1],
+                                Chisq = comparison_1$`Chisq`[2],
+                                P = comparison_1$`Pr(>Chisq)`[2]),
+                     data.frame(Response = var,
+                                Model = "Species only",
+                                AIC_delta = comparison_2$AIC[2] - comparison_2$AIC[1],
+                                Chisq = comparison_2$`Chisq`[2],
+                                P = comparison_2$`Pr(>Chisq)`[2]))
+  }
+  
+  return(results)
+}
+
+# Running function
+response_vars <- c("pca_reproductive$x[,1]", "pca_reproductive$x[,2]")
+results_table_reproductive <- compare_models(data_for_reproductive, response_vars)
+response_vars <- c("pca_vegetative$x[,1]", "pca_vegetative$x[,2]")
+results_table_vegetative <- compare_models(data_for_vegetative, response_vars)
+
+# Renaming entries
+results_table_vegetative$Model <- as.factor(results_table_vegetative$Model)
+# Rename the levels of the Model factor
+levels(results_table_vegetative$Model)[levels(results_table_vegetative$Model) == "Strain only"] <- "Species effect"
+levels(results_table_vegetative$Model)[levels(results_table_vegetative$Model) == "Species only"] <- "Strain effect"
+
+results_table_vegetative$Response <- as.factor(results_table_vegetative$Response)
+# Rename the levels of the Response factor
+levels(results_table_vegetative$Response)[levels(results_table_vegetative$Response) == "pca_vegetative$x[,1]"] <- "PC1"
+levels(results_table_vegetative$Response)[levels(results_table_vegetative$Response) == "pca_vegetative$x[,2]"] <- "PC2"
+
+results_table_reproductive$Model <- as.factor(results_table_reproductive$Model)
+# Rename the levels of the Model factor
+levels(results_table_reproductive$Model)[levels(results_table_reproductive$Model) == "Strain only"] <- "Species effect"
+levels(results_table_reproductive$Model)[levels(results_table_reproductive$Model) == "Species only"] <- "Strain effect"
+
+results_table_reproductive$Response <- as.factor(results_table_reproductive$Response)
+# Rename the levels of the Response factor
+levels(results_table_reproductive$Response)[levels(results_table_reproductive$Response) == "pca_reproductive$x[,1]"] <- "PC1"
+levels(results_table_reproductive$Response)[levels(results_table_reproductive$Response) == "pca_reproductive$x[,2]"] <- "PC2"
+
+# Create table for publication
+ft_veg <- flextable(results_table_vegetative)
+ft_veg <- set_formatter(ft_veg, P = function(x) {
+    formatC(x, format = "e", digits = 2)
+  })
+ft_veg <- set_formatter(ft_veg, Chisq = function(x) {
+    formatC(x, format = "f", digits = 2)
+  })
+ft_veg <- set_formatter(ft_veg, AIC_delta = function(x) {
+    formatC(x, format = "f", digits = 2)
+  })
+ft_veg <- autofit(ft_veg)
+
+ft_repr <- flextable(results_table_reproductive)
+ft_repr <- set_formatter(ft_repr, P = function(x) {
+    formatC(x, format = "e", digits = 2)
+  })
+ft_repr <- set_formatter(ft_repr, Chisq = function(x) {
+    formatC(x, format = "f", digits = 2)
+  })
+ft_repr <- set_formatter(ft_repr, AIC_delta = function(x) {
+    formatC(x, format = "f", digits = 2)
+  })
+ft_repr <- autofit(ft_repr)
+
+
+save_as_docx(
+  "Vegetative traits" = ft_veg, "Reproductive traits" = ft_repr, 
+  path = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/flextable_modelcomp.docx")
+
+```
+
+
+## Betadisp hyp 1 testing
+### Function to calculate centroids manually
+```{r}
+    centroid_calc <- function(vec, group) { # vec = distance matrix
+        cent <- apply(vec, 2, function(x, group) tapply(x, INDEX = group, 
+            FUN = mean), group = group)
+        if (!is.matrix(cent)) {
+            cent <- matrix(cent, nrow = 1, dimnames = list(as.character(levels(group)), 
+                paste0("Dim", seq_len(NCOL(vec)))))
+        }
+        cent
+    }
+
+#centroid_strains <- centroid_calc(vegdist(reproductive_results, method = "gower"), data_for_reproductive$Sample.source)
+
+
+## Modified betadisper to calculate centroids and group distances for a second  group - this seems a bit overkill as I could have just created two models, one per group, and plotted them on top of each other. I tested it both ways and results are the same.
+betadisper2 <- function (d, group, group2, type = c("median", "centroid"), bias.adjust = FALSE, 
+    sqrt.dist = FALSE, add = FALSE) 
+{
+    dblcen <- function(x, na.rm = TRUE) {
+        cnt <- colMeans(x, na.rm = na.rm)
+        x <- sweep(x, 2L, cnt, check.margin = FALSE)
+        cnt <- rowMeans(x, na.rm = na.rm)
+        sweep(x, 1L, cnt, check.margin = FALSE)
+    }
+    spatialMed <- function(vectors, group, pos) {
+        axes <- seq_len(NCOL(vectors))
+        spMedPos <- vegan:::ordimedian(vectors, group, choices = axes[pos])
+        spMedNeg <- vegan:::ordimedian(vectors, group, choices = axes[!pos])
+        cbind(spMedPos, spMedNeg)
+    }
+    centroidFUN <- function(vec, group) {
+        cent <- apply(vec, 2, function(x, group) tapply(x, INDEX = group, 
+            FUN = mean), group = group)
+        if (!is.matrix(cent)) {
+            cent <- matrix(cent, nrow = 1, dimnames = list(as.character(levels(group)), 
+                paste0("Dim", seq_len(NCOL(vec)))))
+        }
+        cent
+    }
+    Resids <- function(x, c) {
+        if (is.matrix(c)) 
+            d <- x - c
+        else d <- sweep(x, 2, c)
+        rowSums(d^2)
+    }
+    TOL <- sqrt(.Machine$double.eps)
+    if (!inherits(d, "dist")) 
+        stop("distances 'd' must be a 'dist' object")
+    if (any(d < -TOL, na.rm = TRUE)) 
+        stop("dissimilarities 'd' must be non-negative")
+    if (sqrt.dist) 
+        d <- sqrt(d)
+    if (is.logical(add) && isTRUE(add)) 
+        add <- "lingoes"
+    if (is.character(add)) {
+        add <- match.arg(add, c("lingoes", "cailliez"))
+        if (add == "lingoes") {
+            ac <- addLingoes(as.matrix(d))
+            d <- sqrt(d^2 + 2 * ac)
+        }
+        else if (add == "cailliez") {
+            ac <- addCailliez(as.matrix(d))
+            d <- d + ac
+        }
+    }
+    if (missing(type)) 
+        type <- "median"
+    type <- match.arg(type)
+    group <- if (!is.factor(group)) {
+        as.factor(group)
+    }
+    else {
+        droplevels(group, exclude = NA)
+    }
+    group2 <- if (!is.factor(group2)) {
+        as.factor(group2)
+    } else {
+        droplevels(group2, exclude = NA)
+    }
+    n <- attr(d, "Size")
+    x <- matrix(0, ncol = n, nrow = n)
+    x[row(x) > col(x)] <- d^2
+    labs <- attr(d, "Labels")
+    if (any(gr.na <- is.na(group))) {
+        group <- group[!gr.na]
+        x <- x[!gr.na, !gr.na]
+        n <- n - sum(gr.na)
+        labs <- labs[!gr.na]
+        message("missing observations due to 'group' removed")
+    }
+    if (any(x.na <- apply(x, 1, function(x) any(is.na(x))))) {
+        x <- x[!x.na, !x.na]
+        group <- group[!x.na]
+        n <- n - sum(x.na)
+        labs <- labs[!x.na]
+        message("missing observations due to 'd' removed")
+    }
+    x <- x + t(x)
+    x <- dblcen(x)
+    e <- eigen(-x/2, symmetric = TRUE)
+    vectors <- e$vectors
+    eig <- e$values
+    eig <- eig[(want <- abs(eig) > max(TOL, TOL * eig[1L]))]
+    vectors <- vectors[, want, drop = FALSE] %*% diag(sqrt(abs(eig)), 
+        nrow = length(eig))
+    pos <- eig > 0
+    centroids <- switch(type, centroid = centroidFUN(vectors, 
+        group), median = spatialMed(vectors, group, pos))
+    centroids2 <- switch(type, 
+                         centroid = centroidFUN(vectors, group2), 
+                         median = spatialMed(vectors, group2, pos))
+    dist.pos <- Resids(vectors[, pos, drop = FALSE], centroids[group, 
+        pos, drop = FALSE])
+    dist.neg <- 0
+    if (any(!pos)) 
+        dist.neg <- Resids(vectors[, !pos, drop = FALSE], centroids[group, 
+            !pos, drop = FALSE])
+    if (any(dist.neg > dist.pos)) {
+        warning("some squared distances are negative and changed to zero")
+        zij <- Re(sqrt(as.complex(dist.pos - dist.neg)))
+    }
+    else {
+        zij <- sqrt(dist.pos - dist.neg)
+    }
+    if (bias.adjust) {
+        n.group <- as.vector(table(group))
+        zij <- zij * sqrt(n.group[group]/(n.group[group] - 1))
+    }
+    grp.zij <- tapply(zij, group, "mean")
+    # Calculate distances for group2
+    dist.pos2 <- Resids(vectors[, pos, drop = FALSE], centroids2[group2, pos, drop = FALSE])
+    dist.neg2 <- 0
+    if (any(!pos)) 
+        dist.neg2 <- Resids(vectors[, !pos, drop = FALSE], centroids2[group2, !pos, drop = FALSE])
+    if (any(dist.neg2 > dist.pos2)) {
+        warning("some squared distances for group2 are negative and changed to zero")
+        zij2 <- Re(sqrt(as.complex(dist.pos2 - dist.neg2)))
+    }
+    else {
+        zij2 <- sqrt(dist.pos2 - dist.neg2)
+    }
+    if (bias.adjust) {
+        n.group2 <- as.vector(table(group2))
+        zij2 <- zij2 * sqrt(n.group2[group2]/(n.group2[group2] - 1))
+    }
+
+    # Compute mean distances for each level in group2
+    grp.zij2 <- tapply(zij2, group2, "mean")
+    if (any(want)) 
+        colnames(vectors) <- names(eig) <- paste("PCoA", seq_along(eig), 
+            sep = "")
+    if (is.matrix(centroids)) 
+        colnames(centroids) <- names(eig)
+    else names(centroids) <- names(eig)
+    rownames(vectors) <- names(zij) <- labs
+    retval <- list(eig = eig, vectors = vectors, distances = zij, 
+        group = group, centroids = centroids, group2 = group2, centroids2 = centroids2, # Include group2 and its centroids
+        group.distances = grp.zij, group2.distances = grp.zij2, call = match.call())
+    class(retval) <- "betadisper"
+    attr(retval, "method") <- attr(d, "method")
+    attr(retval, "type") <- type
+    attr(retval, "bias.adjust") <- bias.adjust
+    retval
+}
+
+centroid2_plot <- function (x, axes = c(1, 2), cex = 0.7, pch = seq_len(ng), col = NULL, 
+    lty = "solid", lwd = 1, hull = TRUE, ellipse = FALSE, conf, 
+    segments = TRUE, seg.col = "grey", seg.lty = lty, seg.lwd = lwd, 
+    label = TRUE, label.cex = 1, ylab, xlab, main, sub, ...) 
+{
+    localAxis <- function(..., col, bg, pch, cex, lty, lwd) axis(...)
+    localBox <- function(..., col, bg, pch, cex, lty, lwd) box(...)
+    localTitle <- function(..., col, bg, pch, cex, lty, lwd) title(...)
+    Ellipse <- function(scrs, centres, conf, col, lty, lwd, ...) {
+        mat <- cov.wt(scrs, center = centres)
+        if (mat$n.obs == 1) 
+            mat$cov[] <- 0
+        xy <- if (mat$n.obs > 1) {
+            veganCovEllipse(mat$cov, mat$center, conf)
+        }
+        else {
+            scrs
+        }
+        ordiArgAbsorber(xy, FUN = lines, col = col, lty = lty, 
+            lwd = lwd, ...)
+    }
+    if (missing(main)) 
+        main <- deparse(substitute(x))
+    if (missing(sub)) 
+        sub <- paste("method = \"", attr(x, "method"), "\"", 
+            sep = "")
+    if (missing(xlab)) 
+        xlab <- paste("PCoA", axes[1])
+    if (missing(ylab)) 
+        ylab <- paste("PCoA", axes[2])
+    t <- if (missing(conf)) {
+        1
+    }
+    else {
+        sqrt(qchisq(conf, df = 2))
+    }
+    g <- scores(x, choices = axes)
+    ng <- length(levels(x$group2))
+    lev <- levels(x$group2)
+    if (is.null(col)) {
+        col <- palette()
+    }
+    col <- rep_len(col, ng)
+    seg.col <- rep_len(seg.col, ng)
+    plot(g$sites, asp = 1, type = "n", axes = FALSE, ann = FALSE, 
+        ...)
+    if (is.matrix(g$centroids2)) {
+        for (i in seq_along(lev)) {
+            curlev <- lev[i]
+            take <- x$group2 == curlev
+            j <- which(lev == curlev)
+            if (segments) {
+                segments(g$centroids2[j, 1L], g$centroids2[j, 2L], 
+                  g$sites[take, 1L], g$sites[take, 2L], col = seg.col[i], 
+                  lty = seg.lty, lwd = seg.lwd)
+            }
+            if (hull) {
+                ch <- chull(g$sites[take, , drop = FALSE])
+                ch <- c(ch, ch[1])
+                lines(x$vectors[take, axes, drop = FALSE][ch, 
+                  ], col = col[i], lty = lty, lwd = lwd, ...)
+            }
+            if (ellipse) {
+                Ellipse(g$sites[take, , drop = FALSE], centres = g$centroids2[j, 
+                  ], conf = t, col = col[i], lty = lty, lwd = lwd, 
+                  ...)
+            }
+            points(g$centroids2[j, , drop = FALSE], pch = 16, 
+                cex = 1, col = col[i], ...)
+        }
+    }
+    else {
+        if (segments) {
+            segments(g$centroids[, 1L], g$centroids[, 2L], g$sites[, 
+                1L], g$sites[, 2L], col = seg.col, lty = seg.lty, 
+                ...)
+        }
+        if (hull) {
+            ch <- chull(g$sites)
+            ch <- c(ch, ch[1])
+            lines(x$vectors[, axes][ch, ], col = col[1L], lty = lty, 
+                lwd = lwd, ...)
+        }
+        if (ellipse) {
+            Ellipse(g$sites, centres = g$centroids2, conf = t, 
+                col = col[1L], lty = lty, lwd = lwd, ...)
+        }
+        points(g$centroids2[, 1L], g$centroids2[, 2L], pch = 16, 
+            cex = 1, col = col[1L], ...)
+    }
+    points(g$sites, pch = pch[x$group2], cex = cex, col = col[x$group2], 
+        ...)
+    if (label) {
+        ordilabel(x, display = "centroids2", choices = axes, cex = label.cex, 
+            col = col)
+    }
+    localTitle(main = main, xlab = xlab, ylab = ylab, sub = sub, 
+        ...)
+    localAxis(1, ...)
+    localAxis(2, ...)
+    localBox(...)
+    class(g) <- "ordiplot"
+    invisible(g)
+}
+```
+
+```{r}
+# Plot.betadisper modified to draw ellipse polygons, not just outlines
+
+plot_ellipse <- function (x, axes = c(1, 2), cex = 0.7, pch = seq_len(ng), col = NULL, 
+    lty = "solid", lwd = 1, hull = TRUE, ellipse = FALSE, conf, 
+    segments = TRUE, seg.col = "grey", seg.lty = lty, seg.lwd = lwd, 
+    label = TRUE, label.cex = 1, ylab, xlab, main, sub, ...) 
+{
+    localAxis <- function(..., col, bg, pch, cex, lty, lwd) axis(...)
+    localBox <- function(..., col, bg, pch, cex, lty, lwd) box(...)
+    localTitle <- function(..., col, bg, pch, cex, lty, lwd) title(...)
+    Ellipse <- function(scrs, centres, conf, col, lty, lwd, ...) {
+        mat <- cov.wt(scrs, center = centres)
+        if (mat$n.obs == 1) 
+            mat$cov[] <- 0
+        xy <- if (mat$n.obs > 1) {
+            vegan:::veganCovEllipse(mat$cov, mat$center, conf)
+        }
+        else {
+            scrs
+        }
+        transparent_col <- adjustcolor(col, alpha.f = 0.5)
+        polygon(xy, col = transparent_col, border = col, lwd = lwd, ...)
+        #ordiArgAbsorber(xy, FUN = lines, col = col, lty = lty, 
+        #    lwd = lwd, ...)
+    }
+    if (missing(main)) 
+        main <- deparse(substitute(x))
+    if (missing(sub)) 
+        sub <- paste("method = \"", attr(x, "method"), "\"", 
+            sep = "")
+    if (missing(xlab)) 
+        xlab <- paste("PCoA", axes[1])
+    if (missing(ylab)) 
+        ylab <- paste("PCoA", axes[2])
+    t <- if (missing(conf)) {
+        1
+    }
+    else {
+        sqrt(qchisq(conf, df = 2))
+    }
+    g <- scores(x, choices = axes)
+    ng <- length(levels(x$group))
+    lev <- levels(x$group)
+    if (is.null(col)) {
+        col <- palette()
+    }
+    col <- rep_len(col, ng)
+    seg.col <- rep_len(seg.col, ng)
+    plot(g$sites, asp = 1, type = "n", axes = FALSE, ann = FALSE, 
+        ...)
+    if (is.matrix(g$centroids)) {
+        for (i in seq_along(lev)) {
+            curlev <- lev[i]
+            take <- x$group == curlev
+            j <- which(lev == curlev)
+            if (segments) {
+                segments(g$centroids[j, 1L], g$centroids[j, 2L], 
+                  g$sites[take, 1L], g$sites[take, 2L], col = seg.col[i], 
+                  lty = seg.lty, lwd = seg.lwd)
+            }
+            if (hull) {
+                ch <- chull(g$sites[take, , drop = FALSE])
+                ch <- c(ch, ch[1])
+                lines(x$vectors[take, axes, drop = FALSE][ch, 
+                  ], col = col[i], lty = lty, lwd = lwd, ...)
+            }
+            if (ellipse) {
+                Ellipse(g$sites[take, , drop = FALSE], centres = g$centroids[j, 
+                  ], conf = t, col = col[i], lty = lty, lwd = lwd, 
+                  ...)
+            }
+            #points(g$centroids[j, , drop = FALSE], pch = 16, 
+            #    cex = 1, col = col[i], ...)
+        }
+    }
+    else {
+        if (segments) {
+            segments(g$centroids[, 1L], g$centroids[, 2L], g$sites[, 
+                1L], g$sites[, 2L], col = seg.col, lty = seg.lty, 
+                ...)
+        }
+        if (hull) {
+            ch <- chull(g$sites)
+            ch <- c(ch, ch[1])
+            lines(x$vectors[, axes][ch, ], col = col[1L], lty = lty, 
+                lwd = lwd, ...)
+        }
+        if (ellipse) {
+            Ellipse(g$sites, centres = g$centroids, conf = t, 
+                col = col[1L], lty = lty, lwd = lwd, ...)
+        }
+        points(g$centroids[, 1L], g$centroids[, 2L], pch = 16, 
+            cex = 1, col = col[1L], ...)
+    }
+    points(g$sites, pch = pch[x$group], cex = cex, col = col[x$group], 
+        ...)
+    if (label) {
+        ordilabel(x, display = "centroids", choices = axes, cex = label.cex, 
+            col = col)
+    }
+    localTitle(main = main, xlab = xlab, ylab = ylab, sub = sub, 
+        ...)
+    localAxis(1, ...)
+    localAxis(2, ...)
+    localBox(...)
+    class(g) <- "ordiplot"
+    invisible(g)
+}
+```
+
+
+### Betadisp reproductive species level
+```{r}
+### Change dataframe to average per strain
+# For reproductive_results
+reproductive_results$ID <- rownames(reproductive_results)
+
+# For data_for_reproductive (assuming Species.Code is here)
+data_for_reproductive$ID <- rownames(data_for_reproductive)
+
+# Merge to add Species.Code to reproductive_results based on row names (now in ID)
+reproductive_results_with_species <- merge(reproductive_results, data_for_reproductive[, c("ID", "Sample.source", "Species")], by = "ID", all.x = TRUE)
+
+# Remove the 'ID' column before aggregation if it's not needed for the analysis
+reproductive_results_with_species$ID <- NULL
+reproductive_results$ID <- NULL
+data_for_reproductive$ID <- NULL
+
+# Aggregate the means for each species
+strain_means <- aggregate(. ~ Species/Sample.source, data = reproductive_results_with_species, FUN=mean)
+
+## Reproductive traits
+# Between strains
+mod_disp <- betadisper(vegdist(reproductive_results, method = "euclidean"), data_for_reproductive$Species)
+disp_test <- permutest(mod_disp, permutations=999)
+print(disp_test)
+
+# Calculate centroids of strains with my custom betadisper2 function creating centroids2
+mod_disp2 <- betadisper2(vegdist(reproductive_results, method = "euclidean"), data_for_reproductive$Species, data_for_reproductive$Sample.source)
+
+# To directly inspect the mean distances for each group
+means <- aggregate(mod_disp$distances ~ mod_disp$group, FUN=mean)
+print(means)
+print(avg_strain_dispersion <- mean(means$`mod_disp$distances`))
+
+# Pairwise comparison of centroids (variances) using Tukey HSD
+tukey_test <- TukeyHSD(mod_disp)
+print(tukey_test)
+
+# Plotting
+boxplot(mod_disp)
+
+xlim_values <- c(-0.585, 0.32) #c(min(pcoa_vegetative_ape$vectors[,1]), max(pcoa_vegetative_ape$vectors[,1]))
+ylim_values <- c(-0.20, 0.20)
+species_to_pch <- setNames(c(0, 1, 2, 6, 5, 23, 3), levels(data_for_vegetative$Species)) 
+species_to_pch_filled <- setNames(c(22, 21, 24, 25, 23, 5, 3), levels(data_for_vegetative$Species)) 
+
+sample_source_to_species <- data_for_reproductive$Species[match(unique(data_for_reproductive$Sample.source), data_for_reproductive$Sample.source)]
+#SpeciesColorsPul <- setNames(SpeciesColorsPul, levels(sample_source_to_species))
+#SpeciesColorsPul <- factor(SpeciesColorsPul, levels(sample_source_to_species))
+
+# Species plot
+png("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.reproductive.species_hull.png", width = 600, height = 450)
+plot(mod_disp, pch = NA, ellipse = F, hull = T, label = F, segments = FALSE, cex = 1, col = "lightgray")
+#plot(mod_disp$centroids[,1], mod_disp$centroids[,2], xlim = xlim_values, ylim = ylim_values)
+points(mod_disp2$vectors[,1], mod_disp2$vectors[,2], pch = species_to_pch[data_for_reproductive$Species], cex = 1.5, col = "lightgray") # replicates - raw datapoints
+#plot(mod_disp, pch = NA, ellipse = F, hull = FALSE, label = F, segments = FALSE, cex = 2, col = "grey")
+#points(mod_disp2$centroids2[,1], mod_disp2$centroids2[,2], pch = species_to_pch_filled[strain_means$Species], cex = 2, bg = "lightgray", col = NA) # strain centroids
+#ordihull(mod_disp, groups = data_for_reproductive$Species, col = "grey", draw = "polygon")
+points(mod_disp2$centroids[,1], mod_disp2$centroids[,2], pch = species_to_pch_filled, cex = 3, bg = SpeciesColorsPul, col = NA) #species centroids
+```
+
+#### Species plot
+```{r}
+png("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.reproductive.species_hull_noleg.png", width = 600, height = 450)
+
+# Base plot
+plot(mod_disp, pch = NA, ellipse = F, hull = T, label = F, segments = FALSE, cex = 1, col = "lightgray", main = "", xlab = "", ylab = "")
+title(xlab = "PCoA 1", ylab = "PCoA 2", cex.lab = 1.5)
+
+# Plot raw datapoints (replicates)
+points(mod_disp2$vectors[,1], mod_disp2$vectors[,2], pch = species_to_pch[data_for_reproductive$Species], cex = 1.5, col = "lightgray")
+
+# Plot species centroids
+points(mod_disp2$centroids[,1], mod_disp2$centroids[,2], pch = species_to_pch_filled, cex = 3, bg = SpeciesColorsPul, col = NA)
+
+dev.off()
+
+specieslabels_reordered <- specieslabels[1:2]
+specieslabels_reordered[3] <- specieslabels[4]
+specieslabels_reordered[4] <- specieslabels[3]
+
+# Create grob object for the legend
+
+grob_legend <- legendGrob(labels = specieslabels_reordered,
+                          pch = species_to_pch_filled[unique(data_for_reproductive$Species)],
+                          gp = gpar(col = SpeciesColorsPul[unique(data_for_reproductive$Species)], fill = SpeciesColorsPul[unique(data_for_reproductive$Species)], fontsize = 20), nrow = 1)
+
+# Save the plot with the legend
+png("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.reproductive.species_hull_legend.png", width = 800, height = 450)
+# Set up an empty plot area
+par(mar = c(0, 0, 0, 0))
+plot.new()
+
+# Draw the legend in the empty plot area
+grid.draw(grob_legend)
+
+# Close the plotting device
+dev.off()
+```
+
+
+#### Strain plot
+```{r}
+png("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.reproductive.strains_hull.png", width = 600, height = 450)
+plot_ellipse(mod_disp, pch = NA, ellipse = F, hull = T, label = F, segments = FALSE, cex = 1, col = SpeciesColorsPul, main = "", xlab = "", ylab = "")
+title(xlab = "PCoA 1", ylab = "PCoA 2", cex.lab = 1.5)
+#plot(mod_disp, pch = NA, ellipse = F, hull = FALSE, label = F, segments = FALSE, cex = 2, col = "grey")
+#ordihull(mod_disp, groups = data_for_reproductive$Sample.source, col = "grey", draw = "polygon")
+#ordihull(mod_disp, groups = data_for_reproductive$Species, col = SpeciesColorsPul, draw = "polygon")
+#ordiellipse(mod_disp, groups = data_for_reproductive$Sample.source, col = "grey", draw = "polygon")
+#ordiellipse(mod_disp, groups = data_for_reproductive$Species, col = SpeciesColorsPul, draw = "polygon")
+points(mod_disp2$vectors[,1], mod_disp2$vectors[,2], pch = species_to_pch[data_for_reproductive$Species], cex = 1.5, col = adjustcolor("lightgray", alpha.f = 1)) # replicates - raw datapoints
+#points(mod_disp2$centroids[,1], mod_disp2$centroids[,2], pch = species_to_pch_filled, cex = 3, bg = SpeciesColorsPul, col = "black") # Species centroids
+#points(mod_disp2$centroids2[,1], mod_disp2$centroids2[,2], pch = species_to_pch_filled[strain_means$Species], cex = 2, bg = SpeciesColorsPul[strain_means$Species], col = NA) # Strain centroids
+points(mod_disp2$centroids2[,1], mod_disp2$centroids2[,2], pch = species_to_pch_filled[strain_means$Species], cex = 2, bg = SpeciesColorsPul[strain_means$Species], col = NA) # Strain centroids
+```
+
+
+#### Replicates plot
+```{r}
+png("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.reproductive.replicates_hull.png", width = 600, height = 450)
+plot(mod_disp, pch = NA, ellipse = F, hull = F, label = F, segments = FALSE, cex = 1, col = "lightgray", main = "", xlab = "", ylab = "")
+title(xlab = "PCoA 1", ylab = "PCoA 2", cex.lab = 1.5)
+#points(mod_disp2$vectors[,1], mod_disp2$vectors[,2], pch = species_to_pch[data_for_reproductive$Species], cex = 1.5, col = NA, bg = SpeciesColorsPul[data_for_reproductive$Species]) # raw datapoints
+points(mod_disp2$vectors[,1], mod_disp2$vectors[,2], pch = species_to_pch[data_for_reproductive$Species], cex = 1.5, col = SpeciesColorsPul[data_for_reproductive$Species], bg = NA) # raw datapoints
+#plot(mod_disp, pch = NA, ellipse = F, hull = FALSE, label = F, segments = FALSE, cex = 2, col = "grey")
+#ordihull(mod_disp, groups = data_for_reproductive$Sample.source, col = named_colors)
+ordihull(mod_disp, groups = data_for_reproductive$Species, col = SpeciesColorsPul)
+#ordiellipse(mod_disp, groups = data_for_reproductive$Sample.source, col = "grey", draw = "polygon")
+#ordiellipse(mod_disp, groups = data_for_reproductive$Species, col = SpeciesColorsPul, draw = "polygon")
+for(source in unique(data_for_reproductive$Sample.source)) {
+    idx <- which(data_for_reproductive$Sample.source == source)
+    
+    # Assuming there's a direct relationship where each Sample.source corresponds to one Species
+    # And data_for_reproductive is sorted in the same order as mod_disp$vectors
+    species_for_source <- unique(data_for_reproductive$Species[idx])
+    
+    if(length(species_for_source) == 1) { # Ensure each source maps to a single species
+        # Retrieve the color for the current species
+        col <- SpeciesColorsPul[species_for_source]
+        
+        # Calculate the convex hull for these samples
+        if(length(idx) > 2) {  # Need at least 3 points to form a hull
+            hull_points <- chull(mod_disp$vectors[idx,1], mod_disp$vectors[idx,2])
+            hull_points <- c(hull_points, hull_points[1])  # Ensure the hull is closed
+
+            # Draw the filled hull
+            polygon(mod_disp$vectors[idx[hull_points], 1], mod_disp$vectors[idx[hull_points], 2], col=adjustcolor(col, alpha.f = 0.5), border = NA)
+        }
+    } else { echo("fualt")
+        # Handle cases where a Sample.source maps to multiple species, if necessary
+        # This part of the code depends on how you want to address such cases
+    }
+}
+#points(mod_disp2$centroids2[,1], mod_disp2$centroids2[,2], pch = species_to_pch_filled[strain_means$Species], cex = 2, bg = SpeciesColorsPul[strain_means$Species], col = NA) # Strain centroids
+#points(mod_disp2$centroids[,1], mod_disp2$centroids[,2], pch = species_to_pch_filled, cex = 3, bg = SpeciesColorsPul, col = "black") # Species centroids
+```
+
+
+### Betadisp vegetative species level
+```{r}
+### Change dataframe to average per strain
+# For vegetative_results
+vegetative_results$ID <- rownames(vegetative_results)
+
+# For data_for_vegetative (assuming Species.Code is here)
+data_for_vegetative$ID <- rownames(data_for_vegetative)
+
+# Merge to add Species.Code to vegetative_results based on row names (now in ID)
+vegetative_results_with_species <- merge(vegetative_results, data_for_vegetative[, c("ID", "Sample.source", "Species")], by = "ID", all.x = TRUE)
+
+# Remove the 'ID' column before aggregation if it's not needed for the analysis
+vegetative_results_with_species$ID <- NULL
+vegetative_results$ID <- NULL
+data_for_vegetative$ID <- NULL
+
+# Aggregate the means for each species
+strain_means <- aggregate(. ~ Species/Sample.source, data = vegetative_results_with_species, FUN=mean)
+
+## vegetative traits
+# Between strains
+mod_disp_veg <- betadisper(vegdist(vegetative_results, method = "euclidean"), data_for_vegetative$Species)
+disp_test <- permutest(mod_disp_veg, permutations=999)
+print(disp_test)
+
+# Calculate centroids of strains with my custom betadisper2 function creating centroids2
+mod_disp_veg2 <- betadisper2(vegdist(vegetative_results, method = "euclidean"), data_for_vegetative$Species, data_for_vegetative$Sample.source)
+
+# To directly inspect the mean distances for each group
+means <- aggregate(mod_disp_veg$distances ~ mod_disp_veg$group, FUN=mean)
+print(means)
+print(avg_strain_dispersion <- mean(means$`mod_disp_veg$distances`))
+
+# Pairwise comparison of centroids (variances) using Tukey HSD
+tukey_test <- TukeyHSD(mod_disp_veg)
+print(tukey_test)
+
+# Plotting
+boxplot(mod_disp_veg)
+
+xlim_values <- c(-0.585, 0.32) #c(min(pcoa_vegetative_ape$vectors[,1]), max(pcoa_vegetative_ape$vectors[,1]))
+ylim_values <- c(-0.20, 0.20)
+species_to_pch <- setNames(c(0, 1, 2, 6, 5, 23, 3), levels(data_for_vegetative$Species)) 
+species_to_pch_filled <- setNames(c(22, 21, 24, 25, 23, 5, 3), levels(data_for_vegetative$Species)) 
+
+
+sample_source_to_species <- data_for_vegetative$Species[match(unique(data_for_vegetative$Sample.source), data_for_vegetative$Sample.source)]
+#SpeciesColorsPul <- setNames(SpeciesColorsPul, levels(sample_source_to_species))
+
+# Species plot
+png("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.vegetative.species_hull.png", width = 600, height = 450)
+plot_ellipse(mod_disp_veg, pch = NA, ellipse = F, hull = T, label = F, segments = FALSE, cex = 1, col = "lightgray", main = "", xlab = "", ylab = "")
+title(xlab = "PCoA 1", ylab = "PCoA 2", cex.lab = 1.5)
+#plot(mod_disp_veg$centroids[,1], mod_disp_veg$centroids[,2], xlim = xlim_values, ylim = ylim_values)
+points(mod_disp_veg2$vectors[,1], mod_disp_veg2$vectors[,2], pch = species_to_pch[data_for_vegetative$Species], cex = 1.5, col = "lightgray") # replicates - raw datapoints
+#plot(mod_disp_veg, pch = NA, ellipse = F, hull = FALSE, label = F, segments = FALSE, cex = 2, col = "grey")
+#points(mod_disp_veg2$centroids2[,1], mod_disp_veg2$centroids2[,2], pch = species_to_pch_filled[strain_means$Species], cex = 2, bg = "lightgray", col = NA) # strain centroids
+#ordihull(mod_disp_veg, groups = data_for_vegetative$Species, col = "grey", draw = "polygon")
+points(mod_disp_veg2$centroids[,1], mod_disp_veg2$centroids[,2], pch = species_to_pch_filled, cex = 3, bg = SpeciesColorsPul, col = NA) #species centroids
+
+```
+
+
+#### Strain plot
+```{r}
+png("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.vegetative.strains_hull.png", width = 600, height = 450)
+plot_ellipse(mod_disp_veg, pch = NA, ellipse = F, hull = T, label = F, segments = FALSE, cex = 1, col = SpeciesColorsPul, main = "", xlab = "", ylab = "")
+title(xlab = "PCoA 1", ylab = "PCoA 2", cex.lab = 1.5)
+#plot(mod_disp_veg, pch = NA, ellipse = F, hull = FALSE, label = F, segments = FALSE, cex = 2, col = "grey")
+#ordihull(mod_disp_veg, groups = data_for_vegetative$Sample.source, col = "grey", draw = "polygon")
+#ordihull(mod_disp_veg, groups = data_for_vegetative$Species, col = SpeciesColorsPul, draw = "polygon")
+#ordiellipse(mod_disp_veg, groups = data_for_vegetative$Sample.source, col = "grey", draw = "polygon")
+#ordiellipse(mod_disp_veg, groups = data_for_vegetative$Species, col = SpeciesColorsPul, draw = "polygon")
+points(mod_disp_veg2$vectors[,1], mod_disp_veg2$vectors[,2], pch = species_to_pch[data_for_vegetative$Species], cex = 1.5, col = adjustcolor("lightgray", alpha.f = 1)) # replicates - raw datapoints
+#points(mod_disp_veg2$centroids[,1], mod_disp_veg2$centroids[,2], pch = species_to_pch_filled, cex = 3, bg = SpeciesColorsPul, col = "black") # Species centroids
+points(mod_disp_veg2$centroids2[,1], mod_disp_veg2$centroids2[,2], pch = species_to_pch_filled[strain_means$Species], cex = 2, bg = SpeciesColorsPul[strain_means$Species], col = NA) # Strain centroids
+```
+
+
+#### Replicates plot
+```{r}
+png("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.vegetative.replicates_hull.png", width = 600, height = 450)
+plot_ellipse(mod_disp_veg, pch = NA, ellipse = F, hull = T, label = F, segments = FALSE, cex = 1, col = SpeciesColorsPul, main = "", xlab = "", ylab = "")
+title(xlab = "PCoA 1", ylab = "PCoA 2", cex.lab = 1.5)
+points(mod_disp_veg2$vectors[,1], mod_disp_veg2$vectors[,2], pch = species_to_pch[data_for_vegetative$Species], cex = 1.5, col = SpeciesColorsPul[data_for_vegetative$Species], bg = NA) # raw datapoints
+#plot(mod_disp_veg, pch = NA, ellipse = F, hull = FALSE, label = F, segments = FALSE, cex = 2, col = "grey")
+#ordihull(mod_disp_veg, groups = data_for_vegetative$Sample.source, col = named_colors)
+#ordihull(mod_disp_veg, groups = data_for_vegetative$Species, col = adjustcolor("lightgray", alpha.f = 0.5), draw = "polygon")
+#ordiellipse(mod_disp_veg, groups = data_for_vegetative$Sample.source, col = "grey", draw = "polygon")
+#ordiellipse(mod_disp_veg, groups = data_for_vegetative$Species, col = SpeciesColorsPul, draw = "polygon")
+for(source in unique(data_for_vegetative$Sample.source)) {
+    idx <- which(data_for_vegetative$Sample.source == source)
+    
+    # Assuming there's a direct relationship where each Sample.source corresponds to one Species
+    # And data_for_vegetative is sorted in the same order as mod_disp_veg$vectors
+    species_for_source <- unique(data_for_vegetative$Species[idx])
+    
+    if(length(species_for_source) == 1) { # Ensure each source maps to a single species
+        # Retrieve the color for the current species
+        col <- SpeciesColorsPul[species_for_source]
+        
+        # Calculate the convex hull for these samples
+        if(length(idx) > 2) {  # Need at least 3 points to form a hull
+            hull_points <- chull(mod_disp_veg$vectors[idx,1], mod_disp_veg$vectors[idx,2])
+            hull_points <- c(hull_points, hull_points[1])  # Ensure the hull is closed
+
+            # Draw the filled hull
+            polygon(mod_disp_veg$vectors[idx[hull_points], 1], mod_disp_veg$vectors[idx[hull_points], 2], col=adjustcolor(col, alpha.f = 0.2), border = NA)
+        }
+    } else { echo("fualt")
+        # Handle cases where a Sample.source maps to multiple species, if necessary
+        # This part of the code depends on how you want to address such cases
+    }
+}
+#points(mod_disp_veg2$centroids2[,1], mod_disp_veg2$centroids2[,2], pch = species_to_pch_filled[strain_means$Species], cex = 2, bg = SpeciesColorsPul[strain_means$Species], col = NA) # Strain centroids
+#ordiellipse(mod_disp_veg, groups = data_for_vegetative$Species, draw = "polygon", col = "black", alpha = 0.2, kind = "sd", border = NA)
+#points(mod_disp_veg2$centroids[,1], mod_disp_veg2$centroids[,2], pch = species_to_pch_filled, cex = 3, bg = SpeciesColorsPul, col = "black") # Species centroids
+```
+
+
+## Adonis2 to test for differences between species centroids
+```{r}
+adonis2(vegetative_daisy ~ Species, data = data_for_vegetative, method = "euclidean")
+
+adonis2(reproductive_daisy ~ Species, data = data_for_reproductive, method = "euclidean")
+```
+
+
+## Hypothesis  testing using multiple regression on distance matrices approach
+```{r}
+### Reproductive traits
+# Create one matrix per category
+
+# Species distance matrix
+Z <- model.matrix(
+	~ 0 + Species,
+	data = data_for_reproductive
+)
+species_dist_reproductive <- 1 - Z %*% t(Z)
+species_dist_reproductive <- lower(species_dist_reproductive) # extract  the diagonal
+
+# Strain dist_reproductiveance matrix
+Z <- model.matrix(
+	~ 0 + Sample.source,
+	data = data_for_reproductive
+)
+strain_dist_reproductive <- 1 - Z %*% t(Z)
+strain_dist_reproductive <- lower(strain_dist_reproductive)
+
+# Shelf level dist_reproductiveance matrix
+Z <- model.matrix(
+	~ 0 + shelfxlevel,
+	data = data_for_reproductive
+)
+shelf_dist_reproductive <- 1 - Z %*% t(Z)
+shelf_dist_reproductive <- lower(shelf_dist_reproductive)
+
+# Shelf level dist_reproductiveance matrix
+Z <- model.matrix(
+	~ 0 + shelf,
+	data = data_for_reproductive
+)
+shelfID_dist_reproductive <- 1 - Z %*% t(Z)
+shelfID_dist_reproductive <- lower(shelfID_dist_reproductive)
+
+# Shelf level dist_reproductiveance matrix
+Z <- model.matrix(
+	~ 0 + level,
+	data = data_for_reproductive
+)
+level_dist_reproductive <- 1 - Z %*% t(Z)
+level_dist_reproductive <- lower(level_dist_reproductive)
+
+# Water content distance matrix
+water_content <- data_for_reproductive$Flush1Fruitbody_water_content
+water_dist_reproductive <- dist(water_content, method = "euclidean")
+
+# Run MRM model
+#MRM_reproductive_logistic <- MRM(reproductive_daisy ~ species_dist_reproductive + strain_dist_reproductive + shelf_dist_reproductive, nperm = 1000,method = "logistic")
+#MRM_reproductive <- MRM(reproductive_daisy ~ species_dist_reproductive + strain_dist_reproductive + shelf_dist_reproductive) # linear regression
+MRM_reproductive_simple <- MRM(reproductive_daisy ~ species_dist_reproductive + strain_dist_reproductive + shelfID_dist_reproductive + level_dist_reproductive) # linear regression
+
+MRM_reproductive_watercont <- MRM(reproductive_daisy ~ species_dist_reproductive + strain_dist_reproductive + shelfID_dist_reproductive + level_dist_reproductive + water_dist_reproductive) # linear regression
+
+
+
+
+
+MRM_reproductive_complex <- MRM(reproductive_daisy ~ species_dist_reproductive + strain_dist_reproductive + shelfID_dist_reproductive + level_dist_reproductive + shelf_dist_reproductive)
+MRM_reproductive_speciesonly <- MRM(reproductive_daisy ~ species_dist_reproductive)
+print(MRM_reproductive_speciesonly)
+MRM_reproductive_strainonly <- MRM(reproductive_daisy ~ strain_dist_reproductive)
+print(MRM_reproductive_strainonly)
+print(MRM_reproductive_simple)
+print(MRM_reproductive_complex)
+#print(MRM_reproductive_logistic)
+
+### Vegetative traits
+# Create one matrix per category
+
+# Species distance matrix
+Z <- model.matrix(
+	~ 0 + Species,
+	data = data_for_vegetative
+)
+species_dist_vegetative <- 1 - Z %*% t(Z)
+species_dist_vegetative <- lower(species_dist_vegetative)
+
+# Strain dist_vegetativeance matrix
+Z <- model.matrix(
+	~ 0 + Sample.source,
+	data = data_for_vegetative
+)
+strain_dist_vegetative <- 1 - Z %*% t(Z)
+strain_dist_vegetative <- lower(strain_dist_vegetative)
+
+# Shelf level dist_vegetativeance matrix
+Z <- model.matrix(
+	~ 0 + shelfxlevel,
+	data = data_for_vegetative
+)
+shelf_dist_vegetative <- 1 - Z %*% t(Z)
+shelf_dist_vegetative <- lower(shelf_dist_vegetative)
+
+# Shelf level dist_vegetativeance matrix
+Z <- model.matrix(
+	~ 0 + shelf,
+	data = data_for_vegetative
+)
+shelfID_dist_vegetative <- 1 - Z %*% t(Z)
+shelfID_dist_vegetative <- lower(shelfID_dist_vegetative)
+
+# Shelf level dist_vegetativeance matrix
+Z <- model.matrix(
+	~ 0 + level,
+	data = data_for_vegetative
+)
+level_dist_vegetative <- 1 - Z %*% t(Z)
+level_dist_vegetative <- lower(level_dist_vegetative)
+
+# Water content distance matrix
+#water_content <- data_for_vegetative$Flush1Fruitbody_water_content
+#water_dist_vegetative <- dist(water_content, method = "euclidean")
+
+# Run MRM model
+#MRM_vegetative_logistic <- MRM(vegetative_daisy ~ species_dist_vegetative + strain_dist_vegetative + shelf_dist_vegetative, nperm = 1000, method = "logistic")
+#print(MRM_vegetative_logistic)
+MRM_vegetative_simple <- MRM(vegetative_daisy ~ species_dist_vegetative + strain_dist_vegetative + shelfID_dist_vegetative + level_dist_vegetative) # linear regression
+
+#MRM_vegetative_watercont <- MRM(vegetative_daisy ~ species_dist_vegetative + strain_dist_vegetative + shelfID_dist_vegetative + level_dist_vegetative + water_dist_vegetative) # linear regression
+
+
+MRM_vegetative_complex <- MRM(vegetative_daisy ~ species_dist_vegetative + strain_dist_vegetative + shelfID_dist_vegetative + level_dist_vegetative + shelf_dist_vegetative)
+#MRM_vegetative <- MRM(vegetative_daisy ~ species_dist_vegetative + strain_dist_vegetative + shelf_dist_vegetative) # linear regression
+MRM_vegetative_speciesonly <- MRM(vegetative_daisy ~ species_dist_vegetative)
+print(MRM_vegetative_speciesonly)
+MRM_vegetative_strainonly <- MRM(vegetative_daisy ~ strain_dist_vegetative)
+print(MRM_vegetative_strainonly)
+#print(MRM_vegetative)
+print(MRM_vegetative_simple)
+print(MRM_vegetative_complex)
+
+
+```
+
+## MRM results table
+```{r}
+# Convert the matrix to a data frame
+veg_df <- as.data.frame(MRM_vegetative_simple$coef)
+# Set the first column as the row names from the matrix
+veg_df$Description <- rownames(veg_df)
+# Reorder the columns to have the description first
+veg_df <- veg_df[, c("Description", "vegetative_daisy", "pval")]
+
+MRM_effect_levels <- c("Intercept", "Level", "Shelf", "Species", "Strain")
+
+# Renaming entries
+veg_df$Description <- factor(veg_df$Description, labels = MRM_effect_levels)
+# Rename the columns
+names(veg_df)[names(veg_df) == "Description"] <- "Effect"
+names(veg_df)[names(veg_df) == "vegetative_daisy"] <- "Regression coefficient"
+names(veg_df)[names(veg_df) == "pval"] <- "p"
+veg_df$type <- rep("Vegetative traits", 5)
+veg_df <- veg_df[c(4, 1, 2, 3)]
+
+#Creating table
+MRM_vegetative_table <- flextable(veg_df)
+MRM_vegetative_table <- set_formatter(MRM_vegetative_table, "Regression coefficient" = function(x) {
+    formatC(x, format = "f", digits = 3)
+  })
+
+# Convert the matrix to a data frame
+coef_df <- as.data.frame(MRM_reproductive_simple$coef)
+# Set the first column as the row names from the matrix
+coef_df$Description <- rownames(coef_df)
+# Reorder the columns to have the description first
+coef_df <- coef_df[, c("Description", "reproductive_daisy", "pval")]
+
+# Renaming entries
+coef_df$Description <- factor(coef_df$Description, labels = MRM_effect_levels)
+# Rename the columns
+names(coef_df)[names(coef_df) == "Description"] <- "Effect"
+names(coef_df)[names(coef_df) == "reproductive_daisy"] <- "Regression coefficient"
+names(coef_df)[names(coef_df) == "pval"] <- "p"
+coef_df$type <- rep("Reproductive traits", 5)
+coef_df <- coef_df[c(4, 1, 2, 3)]
+
+#Creating table
+MRM_reproductive_table <- flextable(coef_df)
+MRM_reproductive_table <- set_formatter(MRM_reproductive_table, "Regression coefficient" = function(x) {
+    formatC(x, format = "f", digits = 3)
+  })
+
+#Combined flextable
+MRM_table <- flextable(rbind(veg_df, coef_df))
+MRM_table <- set_formatter(MRM_table, "Regression coefficient" = function(x) {
+    formatC(x, format = "f", digits = 3)
+  })
+MRM_table <- autofit(MRM_table)
+
+save_as_docx(
+  "MRM results" = MRM_table, 
+  path = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/flextable_MRM.docx")
+```
+
+
+
+# Hypothesis 2: Wild vs cultivated
+
+## Betadisper to visualise species and strain centroids
+### Group differences plots
+```{r}
+## A) All traits
+# Filter for cultivated/wild testing
+data_for_hyp2 <- data_for_distance[!data_for_distance$Species == "Pul_intl",]
+data_for_hyp2 <- data_for_hyp2[!data_for_hyp2$Species == "Dja",]
+data_for_hyp2 <- data_for_hyp2[!apply(is.na(data_for_hyp2[includeTraits]), 1, any), ] # remove any rows with NAs
+data_scaled_hyp2 <- decostand(data_for_hyp2[includeTraits], method = "standardize")
+
+# PERMANOVA
+mod_perm <- adonis2(vegdist(data_scaled_hyp2, method = "euclidean") ~ Cultivated.wild, data = data_for_hyp2, permutations = 999)
+print(mod_perm)
+
+# PERMDISP to test for differences in dispersion
+mod_disp <- betadisper(vegdist(data_scaled_hyp2, method = "euclidean"), data_for_hyp2$Cultivated.wild)
+disp_test <- permutest(mod_disp, permutations=999)
+print(disp_test)
+boxplot(mod_disp)
+
+# To directly inspect the mean distances for each group
+means <- aggregate(mod_disp$distances ~ mod_disp$group, FUN=mean)
+print(means)
+
+pch_cultwild <- c(24, 22, 21)
+col_cultwild <- c("#6B7900", "#9C0039")
+col_cultwild <- c("lightgray", "black")
+
+# Second model to plot strain centroids
+strain_means <- aggregate(. ~ Species/Sample.source, data = data_for_hyp2, FUN=mean) # Aggregate the means for each species to plot later
+strain_means <- strain_means[-8]
+distinct_data <- distinct(data_for_hyp2, Sample.source, Cultivated.wild)
+strain_means <- left_join(strain_means, distinct_data, by = "Sample.source")
+mod_disp2 <- betadisper(vegdist(data_scaled_hyp2, method = "euclidean"), data_for_hyp2$Sample.source)
+
+# Plotting
+png("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.hyp2.betadisp.png", width = 600, height = 450)
+plot(mod_disp, ellipse = F, hull = F, label = F, pch = NA, segments = FALSE, cex = 1, main = "", xlab = "", ylab = "")
+title(xlab = "PCoA 1", ylab = "PCoA 2", cex.lab = 1.5)
+ordihull(mod_disp, label = F, groups = data_for_hyp2$Cultivated.wild, col = col_cultwild, draw = "polygon", border = NA, alpha = 0.4)
+#points(mod_disp2$centroids[,1], mod_disp2$centroids[,2], pch = pch_cultwild[data_for_hyp2$Cultivated.wild], cex = 3, col = "black", bg = SpeciesColorsPul[data_for_hyp2$Species]) # replicates - raw datapoints
+#ordihull(mod_disp, label = F, groups = data_for_hyp2$Sample.source, col = SpeciesColorsPul[data_for_hyp2$Cultivated.wild])
+#ordihull(mod_disp, label = F, groups = data_for_hyp2$Species, col = SpeciesColorsPul, draw = "polygon", border = NA, alpha = 0.5)
+for(source in unique(data_for_hyp2$Sample.source)) {
+    idx <- which(data_for_hyp2$Sample.source == source)
+    
+    # Assuming there's a direct relationship where each Sample.source corresponds to one Species
+    # And data_for_hyp2 is sorted in the same order as mod_disp$vectors
+    species_for_source <- unique(data_for_hyp2$Species[idx])
+    
+    if(length(species_for_source) == 1) { # Ensure each source maps to a single species
+        # Retrieve the color for the current species
+        col <- SpeciesColorsPul[species_for_source]
+        
+        # Calculate the convex hull for these samples
+        if(length(idx) > 2) {  # Need at least 3 points to form a hull
+            hull_points <- chull(mod_disp$vectors[idx,1], mod_disp$vectors[idx,2])
+            hull_points <- c(hull_points, hull_points[1])  # Ensure the hull is closed
+
+            # Draw the filled hull
+            polygon(mod_disp$vectors[idx[hull_points], 1], mod_disp$vectors[idx[hull_points], 2], col=adjustcolor(col, alpha.f = 0.6), border = NA)
+        }
+    } else { echo("fualt")
+        # Handle cases where a Sample.source maps to multiple species, if necessary
+        # This part of the code depends on how you want to address such cases
+    }
+}
+points(mod_disp$vectors[,1], mod_disp$vectors[,2], pch = pch_cultwild[data_for_hyp2$Cultivated.wild], cex = 1.3, col = "black", bg = SpeciesColorsPul[data_for_hyp2$Species]) # replicates - raw datapoints
+dev.off()
+
+
+# Plotting strain centroids
+png("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.hyp2.betadisp.strains.png", width = 600, height = 450)
+plot(mod_disp, ellipse = F, hull = F, label = F, pch = NA, segments = FALSE, cex = 1, main = "", xlab = "", ylab = "")
+title(xlab = "PCoA 1", ylab = "PCoA 2", cex.lab = 1.5)
+ordihull(mod_disp, label = F, groups = data_for_hyp2$Cultivated.wild, col = col_cultwild, draw = "polygon", border = NA, alpha = 0.4)
+points(mod_disp$vectors[,1], mod_disp$vectors[,2], pch = pch_cultwild[data_for_hyp2$Cultivated.wild], cex = 1.3, col = "black") # replicates - raw datapoints
+points(mod_disp2$centroids[,1], mod_disp2$centroids[,2], pch = pch_cultwild[strain_means$Cultivated.wild], cex = 3, bg = SpeciesColorsPul[strain_means$Species]) # strain centroids
+#ordispider(mod_disp2, label = F, groups = data_for_hyp2$Sample.source, col = SpeciesColorsPul[strain_means$Species], lwd = 3)
+
+# Plotting type legend
+legend("bottomleft", legend = c("Cultivated", "Wild"), pch = c(22, 21), col = NA, title = "Type", cex = 1.5, bty = "n", bg = NA, pt.bg = c("lightgray", "darkgray"), pt.cex = 3)
+
+# Plotting species legend
+legend("bottomright", legend = c("P. parsonsiae", "P. pulmonarius 'NZ'"), col = NA, fill = SpeciesColorsPul[strain_means$Species], title = "Species", cex = 1.5, bty = "n", bg = NA)
+```
+
+
+## glmmTMB per trait - for between strain variation (nested within species) is lower in cultivated strains than in wild strains
+```{r}
+## All traits
+# PCA on all traits
+pca_all_traits <- prcomp(data_scaled_hyp2, scale=T)
+print(biplot(pca_all_traits))
+summary(pca_all_traits)
+
+# nested mixed effects model, using group as a fixed effect
+alltraits_hyp2_pca1_model <- glmmTMB(pca_all_traits$x[,1] ~ (1 | Species/Sample.source)+ (0 + Cultivated.wild | Species/Sample.source) + (1 | shelf * level), data = data_for_hyp2, family = gaussian())
+summary(alltraits_hyp2_pca1_model)
+
+alltraits_hyp2_pca1_reduced <- glmmTMB(pca_all_traits$x[,1] ~ (1 | Species/Sample.source) + (1 | shelf * level), data = data_for_hyp2, family = gaussian())
+summary(alltraits_hyp2_pca1_reduced)
+print(anova(alltraits_hyp2_pca1_model, alltraits_hyp2_pca1_reduced, test = "LRT"))
+
+alltraits_hyp2_pca1_model_lme4 <- lmer(pca_all_traits$x[,1] ~ (1 + Cultivated.wild | Species/Sample.source) + (1 | shelf:level), data = data_for_hyp2)
+summary(alltraits_hyp2_pca1_model_lme4)
+
+alltraits_hyp2_pca1_reduced_lme4 <- lmer(pca_all_traits$x[,1] ~ (1 | Species/Sample.source) + (1 | shelf:level), data = data_for_hyp2)
+summary(alltraits_hyp2_pca1_reduced_lme4)
+
+print(anova(alltraits_hyp2_pca1_model_lme4, alltraits_hyp2_pca1_reduced_lme4))
+
+alltraits_hyp2_pca2_model <- glmmTMB(pca_all_traits$x[,2] ~ Cultivated.wild + (1 | Species/Sample.source) + (1 | shelfxlevel), data = data_for_hyp2, family = gaussian())
+summary(alltraits_hyp2_pca2_model)
+
+# Running one model per trait, per group
+### Cultivated model
+# Initialize an empty list to store the model results
+model_results <- list()
+
+# Loop over each trait in the 'includeTraits' vector
+for (trait in includeTraits) {
+  # Create the formula dynamically using the current trait
+  formula <- as.formula(paste(trait, "~ (1 | Species/Sample.source) + (1 | shelf * level)"))
+
+  # Run the glmmTMB model for the current trait
+  model <- glmmTMB(formula, data = data_for_hyp2[data_for_hyp2$Cultivated.wild == "cultivated",], family = gaussian())
+
+  # Store the summary of the model in the list
+  model_results[[trait]] <- summary(model)
+}
+model_results_cultivated <- model_results
+
+# To convert the list of model summaries to a dataframe 
+results_dataframe <- data.frame(
+  Trait = includeTraits,
+  #Trait = vegetative_traits,
+  #Trait = reproductive_traits,
+  Intercept_Estimate = sapply(model_results, function(x) x$coefficients$cond["(Intercept)", "Estimate"]),
+  Intercept_StdError = sapply(model_results, function(x) x$coefficients$cond["(Intercept)", "Std. Error"]),
+  Intercept_pValue = sapply(model_results, function(x) x$coefficients$cond["(Intercept)", "Pr(>|z|)"]),
+#  Cultivated_Wild_Estimate = sapply(model_results, function(x) x$coefficients$cond["Cultivated.wildwild", "Estimate"]),
+#  Cultivated_Wild_StdError = sapply(model_results, function(x) x$coefficients$cond["Cultivated.wildwild", "Std. Error"]),
+#  Cultivated_Wild_pValue = sapply(model_results, function(x) x$coefficients$cond["Cultivated.wildwild", "Pr(>|z|)"]),
+  Variance_Sample_Source_Species = sapply(model_results, function(x) x$varcor$cond$`Sample.source:Species`[1, 1]),
+  StdDev_Sample_Source_Species = sapply(model_results, function(x) sqrt(x$varcor$cond$`Sample.source:Species`[1, 1])),
+  Variance_Species = sapply(model_results, function(x) x$varcor$cond$Species[1, 1]),
+  StdDev_Species = sapply(model_results, function(x) sqrt(x$varcor$cond$Species[1, 1])),
+  Variance_Shelf = sapply(model_results, function(x) x$varcor$cond$shelf[1, 1]),
+  StdDev_Shelf = sapply(model_results, function(x) sqrt(x$varcor$cond$shelf[1, 1])),
+  Variance_Level = sapply(model_results, function(x) x$varcor$cond$level[1, 1]),
+  StdDev_Level = sapply(model_results, function(x) sqrt(x$varcor$cond$level[1, 1])),
+  Variance_Shelf_Level = sapply(model_results, function(x) x$varcor$cond$`shelf:level`[1, 1]),
+  StdDev_Shelf_Level = sapply(model_results, function(x) sqrt(x$varcor$cond$`shelf:level`[1, 1])),
+  Residual_Variance = sapply(model_results, function(x) x$sigma^2)
+)
+
+results_dataframe_cultivated <- results_dataframe
+
+### Wild model
+# Initialize an empty list to store the model results
+model_results <- list()
+
+# Loop over each trait in the 'includeTraits' vector
+for (trait in includeTraits) {
+  # Create the formula dynamically using the current trait
+  formula <- as.formula(paste(trait, "~ (1 | Species/Sample.source) + (1 | shelf * level)"))
+
+  # Run the glmmTMB model for the current trait
+  model <- glmmTMB(formula, data = data_for_hyp2[data_for_hyp2$Cultivated.wild == "wild",], family = gaussian())
+
+  # Store the summary of the model in the list
+  model_results[[trait]] <- summary(model)
+}
+model_results_wild <- model_results
+
+# To convert the list of model summaries to a dataframe 
+results_dataframe <- data.frame(
+  Trait = includeTraits,
+  #Trait = vegetative_traits,
+  #Trait = reproductive_traits,
+  Intercept_Estimate = sapply(model_results, function(x) x$coefficients$cond["(Intercept)", "Estimate"]),
+  Intercept_StdError = sapply(model_results, function(x) x$coefficients$cond["(Intercept)", "Std. Error"]),
+  Intercept_pValue = sapply(model_results, function(x) x$coefficients$cond["(Intercept)", "Pr(>|z|)"]),
+#  Cultivated_Wild_Estimate = sapply(model_results, function(x) x$coefficients$cond["Cultivated.wildwild", "Estimate"]),
+#  Cultivated_Wild_StdError = sapply(model_results, function(x) x$coefficients$cond["Cultivated.wildwild", "Std. Error"]),
+#  Cultivated_Wild_pValue = sapply(model_results, function(x) x$coefficients$cond["Cultivated.wildwild", "Pr(>|z|)"]),
+  Variance_Sample_Source_Species = sapply(model_results, function(x) x$varcor$cond$`Sample.source:Species`[1, 1]),
+  StdDev_Sample_Source_Species = sapply(model_results, function(x) sqrt(x$varcor$cond$`Sample.source:Species`[1, 1])),
+  Variance_Species = sapply(model_results, function(x) x$varcor$cond$Species[1, 1]),
+  StdDev_Species = sapply(model_results, function(x) sqrt(x$varcor$cond$Species[1, 1])),
+  Variance_Shelf = sapply(model_results, function(x) x$varcor$cond$shelf[1, 1]),
+  StdDev_Shelf = sapply(model_results, function(x) sqrt(x$varcor$cond$shelf[1, 1])),
+  Variance_Level = sapply(model_results, function(x) x$varcor$cond$level[1, 1]),
+  StdDev_Level = sapply(model_results, function(x) sqrt(x$varcor$cond$level[1, 1])),
+  Variance_Shelf_Level = sapply(model_results, function(x) x$varcor$cond$`shelf:level`[1, 1]),
+  StdDev_Shelf_Level = sapply(model_results, function(x) sqrt(x$varcor$cond$`shelf:level`[1, 1])),
+  Residual_Variance = sapply(model_results, function(x) x$sigma^2)
+)
+
+results_dataframe_wild <- results_dataframe
+
+```
+
+#### Checking for outliers
+```{r}
+plot(data_for_hyp2$Sample.source, data_for_hyp2$Flush1Time_to_Mature)
+plot(data_for_hyp2$Sample.source, data_for_hyp2$Flush1Fruitbody_water_content)
+
+plot(data_for_hyp2$Cultivated.wild, data_for_hyp2$Flush1Fruitbody_water_content)
+
+ggplot(data_for_hyp2, aes(x = Cultivated.wild, y = Flush1Fruitbody_water_content)) +
+  geom_violin(aes(fill = Species), alpha = 0.5, position = position_dodge(width = 0.75)) +
+  geom_beeswarm(aes(fill = Species), alpha = 0.5, position = position_dodge(width = 0.75)) +
+  labs(
+    x = "Cultivated/Wild"
+  ) +
+  theme_minimal()
+
+ggplot(data_for_hyp2, aes(x = Cultivated.wild, y = Flush1Time_to_Mature)) +
+  geom_violin(aes(fill = Species), alpha = 0.5, position = position_dodge(width = 0.75)) +
+  geom_beeswarm(aes(fill = Species), alpha = 0.5, position = position_dodge(width = 0.75)) +
+  labs(
+    x = "Cultivated/Wild"
+  ) +
+  theme_minimal()
+
+# Calculate standard deviation for each unique Sample.source
+sd_result <- data_for_hyp2 %>%
+  #filter(Sample.source != "DH842") %>%
+  group_by(Species, Cultivated.wild) %>%
+  summarise(
+    sd_Flush1Fruitbody_water_content = sd(Flush1Fruitbody_water_content, na.rm = TRUE),
+    sd_Flush1Time_to_Mature = sd(Flush1Time_to_Mature, na.rm = TRUE)
+  )
+
+# Print the result
+print(sd_result)
+
+plot(sd_result$Cultivated.wild, sd_result$sd_Flush1Fruitbody_water_content)
+plot(sd_result$Cultivated.wild, sd_result$sd_Flush1Time_to_Mature)
+
+ggplot(sd_result, aes(x = Cultivated.wild, y = sd_Flush1Fruitbody_water_content)) +
+  geom_violin(aes(fill = Species), alpha = 0.5, position = position_dodge(width = 0.75)) +
+  geom_beeswarm() +
+  labs(
+    x = "Cultivated/Wild"
+  ) +
+  theme_minimal()
+
+
+```
+
+
+#### Results with logical test
+```{r}
+# Function to extract results and perform F-test with absolute variances
+create_results_dataframe <- function(model_results_wild, model_results_cultivated) {
+  # Initialize an empty data frame
+  results_dataframe <- data.frame(
+    trait = character(),
+    Between_strain_variance_wild = numeric(),
+    Between_strain_variance_cultivated = numeric(),
+    hyp2 = logical(),  # New column for hypothesis testing results
+    stringsAsFactors = FALSE
+  )
+  
+  # Iterate over each trait in the model results
+  trait_names <- names(model_results_wild)
+  for (trait in trait_names) {
+    # Extract variance for wild group
+    var_wild <- attr(model_results_wild[[trait]]$varcor$cond$`Sample.source:Species`, "stddev")^2
+    
+    # Extract variance for cultivated group
+    var_cultivated <- attr(model_results_cultivated[[trait]]$varcor$cond$`Sample.source:Species`, "stddev")^2
+    
+    # Determine if wild variance is greater than cultivated variance
+    hyp2_result <- var_wild > var_cultivated
+    
+    # Append results to the data frame
+    results_dataframe <- rbind(results_dataframe, data.frame(
+      trait = trait,
+      Between_strain_variance_wild = var_wild,
+      Between_strain_variance_cultivated = var_cultivated,
+      hyp2 = hyp2_result  # Add the logical test result to the data frame
+    ))
+  }
+  
+  return(results_dataframe)
+}
+
+
+# Assuming model_results_wild and model_results_cultivated are already loaded
+
+
+final_results_dataframe_absolute <- create_results_dataframe(model_results_wild, model_results_cultivated)
+
+ft_hyp2logical <- flextable(final_results_dataframe_absolute)
+
+ft_hyp2logical <- set_formatter(ft_hyp2logical, Between_strain_variance_wild = function(x) {
+    formatC(x, format = "e", digits = 2)
+  })
+ft_hyp2logical <- set_formatter(ft_hyp2logical, Between_strain_variance_cultivated = function(x) {
+    formatC(x, format = "e", digits = 2)
+  })
+ft_hyp2logical <- autofit(ft_hyp2logical)
+
+save_as_docx(
+  "my table 1" = ft_hyp2logical,  
+  path = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/flextable.docx")
+```
+
+### Confidence intervals of wild and cultivated strains
+```{r}
+# Sample sizes
+n_wild <- 9
+n_cultivated <- 7
+
+# Confidence level
+alpha <- 0.05
+
+# Chi-squared critical values
+A_wild <- qchisq(alpha / 2, df = n_wild - 1)
+B_wild <- qchisq(1 - alpha / 2, df = n_wild - 1)
+A_cultivated <- qchisq(alpha / 2, df = n_cultivated - 1)
+B_cultivated <- qchisq(1 - alpha / 2, df = n_cultivated - 1)
+
+# Function to calculate confidence intervals
+calculate_ci <- function(variance, n, A, B) {
+  lower_bound <- ((n - 1) * variance) / B
+  upper_bound <- ((n - 1) * variance) / A
+  return(c(lower_bound, upper_bound))
+}
+
+# Calculate confidence intervals for each trait
+final_results_dataframe_CI <- final_results_dataframe_absolute %>%
+  rowwise() %>%
+  mutate(
+    CI_wild_lower = calculate_ci(Between_strain_variance_wild, n_wild, A_wild, B_wild)[1],
+    CI_wild_upper = calculate_ci(Between_strain_variance_wild, n_wild, A_wild, B_wild)[2],
+    CI_cultivated_lower = calculate_ci(Between_strain_variance_cultivated, n_cultivated, A_cultivated, B_cultivated)[1],
+    CI_cultivated_upper = calculate_ci(Between_strain_variance_cultivated, n_cultivated, A_cultivated, B_cultivated)[2]
+  )
+
+# Print the dataframe with confidence intervals
+print(final_results_dataframe_CI)
+
+# Function to check if two intervals overlap
+check_overlap <- function(lower1, upper1, lower2, upper2) {
+  return(!(upper1 < lower2 | upper2 < lower1))
+}
+
+# Add the Overlap column to the dataframe
+final_results_dataframe_CI <- final_results_dataframe_CI %>%
+  rowwise() %>%
+  mutate(Overlap = check_overlap(CI_wild_lower, CI_wild_upper, CI_cultivated_lower, CI_cultivated_upper))
+
+# Print the updated dataframe
+print(final_results_dataframe_CI)
+
+
+exp_sup <- function(x, digits = 2) {
+  base <- format(x / 10^floor(log10(abs(x))), nsmall = digits, digits = digits, scientific = FALSE)
+  exponent <- floor(log10(abs(x)))
+  sprintf("%s $\\times$ 10^%d^", base, exponent)
+}
+
+# Define the function to add Markdown line break before brackets
+add_linebreak <- function(var, lower, upper, digits = 2) {
+  paste0(exp_sup(var, digits), "  \n(", exp_sup(lower, digits), " - ", exp_sup(upper, digits), ")")
+}
+
+# Create the publication-ready dataframe with line breaks
+hyp2_results_print <- final_results_dataframe_CI %>%
+  rowwise() %>%
+  mutate(
+    wild = add_linebreak(Between_strain_variance_wild, CI_wild_lower, CI_wild_upper, digits = 2),
+    cultivated = add_linebreak(Between_strain_variance_cultivated, CI_cultivated_lower, CI_cultivated_upper, digits = 2)
+  ) %>%
+  select(trait, wild, cultivated, Overlap, hyp2)
+
+# Create a named vector for mapping
+trait_label_map <- setNames(traitLabelsNoUnits, includeTraits)
+
+# Replace trait labels in the hyp2_results_print dataframe
+hyp2_results_print <- hyp2_results_print %>%
+  mutate(trait = trait_label_map[trait])
+
+# Display the new dataframe
+print(hyp2_results_print)
+
+# Create the flextable
+ft <- flextable(hyp2_results_print) %>%
+  colformat_md() %>%
+  autofit()
+
+# Print the flextable
+ft
+
+save_as_docx(
+  "Hyp2 results" = ft, 
+  path = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/flextable_hyp2results.docx")
+```
+
+#### Plotting glmmTMB model results
+```{r}
+# Ensure the traits in final_results_dataframe_CI are properly mapped
+final_results_dataframe_absolute <- final_results_dataframe_absolute %>%
+  mutate(trait = trait_label_map[trait])
+final_results_dataframe_CI <- final_results_dataframe_CI %>%
+  mutate(trait = trait_label_map[trait])
+
+# Reshape the dataframe for plotting
+plot_data <- final_results_dataframe_CI %>%
+  pivot_longer(cols = c("Between_strain_variance_wild", "Between_strain_variance_cultivated"), 
+               names_to = "Population", 
+               values_to = "Variance") %>%
+  mutate(Population = ifelse(grepl("wild", Population), "Wild", "Cultivated")) %>%
+  pivot_wider(names_from = Population, values_from = Variance)
+
+# Create separate dataframes for wild and cultivated confidence intervals
+ci_wild <- final_results_dataframe_CI %>%
+  select(trait, CI_wild_lower, CI_wild_upper) %>%
+  rename(lower = CI_wild_lower, upper = CI_wild_upper) %>%
+  mutate(Population = "Wild")
+
+ci_cultivated <- final_results_dataframe_CI %>%
+  select(trait, CI_cultivated_lower, CI_cultivated_upper) %>%
+  rename(lower = CI_cultivated_lower, upper = CI_cultivated_upper) %>%
+  mutate(Population = "Cultivated")
+
+# Combine confidence interval dataframes
+ci_data <- rbind(ci_wild, ci_cultivated)
+
+# Merge with plot_data
+plot_data <- plot_data %>%
+  pivot_longer(cols = c("Wild", "Cultivated"), names_to = "Population", values_to = "Variance") %>%
+  left_join(ci_data, by = c("trait", "Population"))
+
+# Create alternating background colors for each trait
+plot_data <- plot_data %>%
+  mutate(trait = factor(trait, levels = unique(final_results_dataframe_absolute$trait)),
+         trait_index = as.numeric(trait),
+         background_color = ifelse(trait_index %% 2 == 0, "#E6E6E6", "darkgray"))
+
+# Calculate the y-range for the plot
+y_range <- range(plot_data$Variance, plot_data$lower, plot_data$upper, na.rm = TRUE)
+
+# Create a dataframe for background rectangles
+rect_data <- plot_data %>%
+  distinct(trait, trait_index, background_color) %>%
+  mutate(xmin = trait_index - 0.5, xmax = trait_index + 0.5, ymin = y_range[1], ymax = y_range[2])
+
+# Verify rect_data
+print(rect_data)
+
+# Create the plot with alternating background colors
+hyp2_ci_points <- ggplot() +
+  geom_rect(data = rect_data, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = background_color), alpha = 0.3) +
+  geom_point(data = plot_data, aes(x = factor(trait_index), y = Variance, color = Population), position = position_dodge(width = 0.5), size = 3) +
+  geom_errorbar(data = plot_data, aes(x = factor(trait_index), ymin = lower, ymax = upper, color = Population), position = position_dodge(width = 0.5), width = 0.25) +
+  scale_y_log10() +
+  scale_x_discrete(labels = unique(plot_data$trait)) +
+  scale_fill_identity() +
+  labs(x = "Trait", y = "Absolute Variance (log scale)", color = "Population") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, margin = margin(t = 1)),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank())
+print(hyp2_ci_points)
+
+ggsave(filename = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/plot.hyp2_traits.png", plot = hyp2_ci_points, width = 10, height = 6, dpi = 300, bg = "white")
+```

@@ -1,0 +1,243 @@
+---
+title: "Ex1_colordistance_import"
+output: html_document
+date: "2023-05-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Set working directory
+```{r}
+setwd("C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Cut photos")
+```
+Set Java directory
+```{r}
+Sys.setenv(JAVA_HOME='C:/Program Files/Java/jre1.8.0_361') # for 64-bit version
+```
+
+
+
+Install libraries
+```{r}
+devtools::install_github("hiweller/colordistance", build_vignettes=TRUE)
+install.packages('imager')
+```
+
+
+Load libraries
+```{r}
+library(colordistance)
+library(imager)
+```
+
+Create dataframe with Species, strain and row position
+```{r}
+# Read filenames
+filenames_Caps <- list.files(path = "C:/Users/HeraD/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Cut photos/JPGs-black/Caps/")
+filenames_Gills <- list.files(path = "C:/Users/HeraD/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Cut photos/JPGs-black/")
+
+# Extract ExperimentPosition and PhotoID from filenames
+Caps_df <- data.frame(matrix(ncol = 0, nrow = length(filenames_Caps)))
+Caps_df$CapphotoID <- sub(".*_([0-9]{4})\\..*", "\\1", filenames_Caps)
+Caps_df$Experiment1Positition <- sub(".*_([A-Za-z0-9]{1,2}-[A-Za-z0-9]{1,2})_.*", "\\1", filenames_Caps)
+
+Gills_df <- data.frame(matrix(ncol = 0, nrow = length(filenames_Gills)))
+Gills_df$GillphotoID <- sub(".*_([0-9]{4})\\..*", "\\1", filenames_Gills)
+Gills_df$Experiment1Positition <- sub(".*_([A-Za-z0-9]{1,2}-[A-Za-z0-9]{1,2})_.*", "\\1", filenames_Gills)
+Gills_df <- Gills_df[-15,]
+
+```
+
+
+Import photos
+```{r}
+#Define background colour range
+#low = c(0.596,0,0.592)
+#upp = c(0.62,0,0.595)
+
+#white
+#low = rep(0.95, 3)
+#upp = c(1, 1, 1)
+
+#black
+low = rep(0, 3)
+upp = rep(0.1, 3)
+
+ test <- plotPixels("C:/Users/HeraD/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Cut photos/JPGs/blacktest.jpg", n = 10000, lower=low, upper=upp)
+
+#Use histogram bins to get three main colors to compare for each
+#testhist2 <- getHistList("C:/Users/HeraD/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Cut photos/JPGs-black/", bins=2, n = 1000, lower=low, upper=upp, pausing = TRUE)
+ 
+# Caps: Use kMeans bins to get three main colors to compare for each
+Capskmeans <- getKMeansList("C:/Users/HeraD/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Cut photos/JPGs-black/Caps/", bins=2, n = 1000, lower=low, upper=upp, plotting = F)
+
+# Extract only the 3 colour values to refine list
+Capskmeans_list <- Capskmeans
+centers_list <- lapply(Capskmeans, function(df) df$centers)
+centers_df <- do.call(rbind, centers_list)
+
+# Create new dataframe of ID and RGB values
+Cap_colours_df <- cbind(Caps_df, centers_df)
+Cap_colours_df <- rename(Cap_colours_df, Cap_r = r, Cap_g = g, Cap_b = b)
+
+# Gills: Use kMeans bins to get three main colors to compare for each
+#Gillskmeans <- getKMeansList("C:/Users/HeraD/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Cut photos/JPGs-black/", bins=1, n = 1000, lower=low, upper=upp, plotting = F)
+
+# Extract only the 3 colour values to refine list
+#Gillskmeans_list <- Gillskmeans
+#centers_list <- lapply(Gillskmeans, function(df) df$centers)
+#centers_df <- do.call(rbind, centers_list)
+
+# Create new dataframe of ID and RGB values
+#Gill_colours_df <- cbind(Gills_df, centers_df)
+#Gill_colours_df <- rename(Gill_colours_df, Gill_r = r, Gill_g = g, Gill_b = b)
+
+# Filter dataframes so they only include the first instance of each unique replicate
+Cap_colours_df_Flush1 <- Cap_colours_df %>%
+  dplyr::group_by(Experiment1Positition) %>%
+  dplyr::filter(row_number() == 1)
+
+Gill_colours_df_Flush1 <- Gill_colours_df %>%
+  dplyr::group_by(Experiment1Positition) %>%
+  dplyr::filter(row_number() == 1)
+
+# Combine dataframes into one so I can import into my main results dataframe, matching by Experiment1Position
+RGB_values_Flush1 <- Cap_colours_df_Flush1[,-1]
+RGB_values_Flush1$Gill_r <- Gill_colours_df_Flush1$Gill_r
+RGB_values_Flush1$Gill_g <- Gill_colours_df_Flush1$Gill_g
+RGB_values_Flush1$Gill_b <- Gill_colours_df_Flush1$Gill_b
+
+
+#Calculate color distance matrix
+#gillsCDM <- getColorDistanceMatrix(testhist2, method="emd", plotting=FALSE)
+
+#Visualise color distance matrix
+#heatmapColorDistance(gillsCDM)
+
+saveRDS(RGB_values_Flush1, file = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/R project/Robjects/RGB_values_Flush1.rds")
+
+```
+
+# PCA on colors
+```{r}
+pca_gill_colours <- prcomp(Gill_colours_df_Flush1[, -c(1:2)], scale=T)
+print(biplot(pca_gill_colours))
+summary(pca_gill_colours)
+pca_gill_colours_axis1 <- rbind(matrix(pca_gill_colours$x[,1], ncol = 1), matrix(Gill_colours_df_Flush1[,2], ncol = 1))
+
+pca_cap_colours <- prcomp(Cap_colours_df_Flush1[, -c(1:2)], scale=T)
+print(biplot(pca_cap_colours))
+summary(pca_cap_colours)
+```
+
+
+# Image area analysis
+```{r}
+# Import photo
+img_test <- imager::load.image("C:/Users/HeraD/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Cut photos/JPGs-areacount/Pars_DH806_A3-15_6785.jpg")
+
+# Convert the image to grayscale
+img_gray <- grayscale(img_test)
+
+# Threshold the image to create a binary image where black pixels are TRUE and others are FALSE
+binary_img <- img_gray < 0.1
+
+# Count the number of white pixels
+black_pixels <- sum(binary_img)
+print(black_pixels)
+
+# Given that 131 pixels correspond to 1 mm, calculate the area each pixel represents
+pixel_area <- (1/131)^2
+
+# Calculate the total area
+total_area <- black_pixels * pixel_area
+
+# Print the total area
+print(total_area)
+```
+
+# Image area analysis - counting all non-black pixels in one photo
+```{r}
+# Import photo
+img_test <- imager::load.image("C:/Users/HeraD/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Cut photos/JPGs-black/Pars_DH806_A3-15_6785.jpg")
+
+# Define the target color in RGB format
+target_color <- c(0, 0, 0)  
+
+# Convert the image to grayscale
+img_gray <- grayscale(img_test)
+
+# Create a logical array where each element is TRUE if the corresponding pixel in the image is not black
+non_black_pixels <- img_gray > 0
+
+# Count the number of non-matching pixels
+non_black_pixels_count <- sum(non_black_pixels)
+
+# Print the number of non-purple pixels
+print(non_black_pixels_count)
+
+# Given that 131 pixels correspond to 1 mm, calculate the area each pixel represents
+pixel_area <- (1/131)^2
+
+# Calculate the total area
+total_area <- non_black_pixels_count * pixel_area
+
+# Print the total area
+print(total_area)
+```
+
+# Image area analysis for all photos in one folder
+```{r}
+# Define the path to your image folder
+folder_path <- "C:/Users/HeraD/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/Cut photos/JPGs-black/"
+
+# Get a list of all image files in the folder
+image_files <- list.files(path = folder_path, pattern = "\\.jpg$")
+
+# Initialize an empty data frame to store the results
+results <- data.frame()
+
+# Loop over each image file
+for (image_file in image_files) {
+  
+  # Load the image
+  img <- load.image(paste0(folder_path, "/", image_file))
+  
+  # Convert the image to grayscale
+  img_gray <- grayscale(img)
+  
+  # Create a logical array where each element is TRUE if the corresponding pixel in the image is not black
+  non_black_pixels <- img_gray > 0
+  
+  # Count the number of non-black pixels
+  non_black_pixels_count <- sum(non_black_pixels)
+  
+  # Given that 131 pixels correspond to 1 mm, calculate the area each pixel represents
+  pixel_area <- (1/131)^2
+  
+  # Calculate the total area
+  total_area <- non_black_pixels_count * pixel_area
+  
+  # Add the results to the data frame
+  results <- rbind(results, data.frame(filename = image_file, total_area = total_area))
+}
+
+# Print the results
+print(results)
+
+# Rename results to be more meaningful
+results$Experiment1Positition <- sub(".*_([A-Za-z0-9]{1,2}-[A-Za-z0-9]{1,2})_.*", "\\1", results$filename)
+Flush1_Fruitbody_size <- results[,-1]
+Flush1_Fruitbody_size <- rename(Flush1_Fruitbody_size, Flush1_Fruitbody_size = total_area)
+
+# Filter dataframes so they only include the first instance of each unique replicate
+Flush1_Fruitbody_size <- Flush1_Fruitbody_size %>%
+  dplyr::group_by(Experiment1Positition) %>%
+  dplyr::filter(row_number() == 1)
+
+saveRDS(Flush1_Fruitbody_size, file = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/05 - Experiment 1 Trait Variation all strains/R project/Robjects/Flush1_Fruitbody_size.rds")
+```
+
