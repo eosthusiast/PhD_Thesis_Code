@@ -1,0 +1,6 @@
+Input file for 02_HD_extract-batch-v2.py was manually created, but can be automated from exonerate output as well.
+all_hypothetical_protein_ids.txt
+
+
+03_STE3_extract-batch.py generates the ProteinName hits file necessary for running 04_MatB_STE3flank_contigs_extract.py, but I first removed duplicate chromosome IDs (instances where multiple STE copies are on same chromosome) and calculated counts of STE copies on a given contig, both done using ChatGPT.
+

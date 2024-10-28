@@ -1,0 +1,8 @@
+# fastStructure and CLUMPAK from bcf tools masked plink file
+module load fastStructure
+
+for k in `seq 1 6`; do for i in `seq 1 10`; do structure.py -K $k --input=./plink_masked/ppoFASTQ_retrim_masked --output=./structureselector/out_run.$i --cv=10 \
+--seed=$RANDOM; done; done
+zip -j -q faststr_results.zip ./structureselector/*.meanQ *.log 
+
+# Then load into Structure Selector https://lmme.ac.cn/StructureSelector/index.html#

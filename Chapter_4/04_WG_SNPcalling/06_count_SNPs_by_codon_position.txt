@@ -1,0 +1,14 @@
+# Count SNPs by codon position, from annotated SNPeff vcf file
+cd /nesi/nobackup/ga03488/David_H/Ppo_Popgen/13_DH641_haploid_non_ragtag_assembly/snpeff
+
+# Extract codon position information from the annotated VCF file
+# This example assumes that the codon position is annotated in the INFO field of the VCF file, as "ANN"
+# "ANN" annotation format typically has the codon position as the 12th field in the "|" delimited list
+
+grep -v "^#" variants_snpeff.vcf | \ # Filter out VCF header lines
+cut -f8 | \ # Extract the INFO field
+grep -oP 'c\.\d+' | \ # Extract codon mutation positions (e.g., c.1424)
+cut -d. -f2 | \ # Isolate the numeric codon position (e.g., 1424)
+awk '{print $1 % 3 == 0 ? 3 : $1 % 3}' | \ # Convert to codon position 1, 2, or 3
+sort | \ # Sort the codon positions
+uniq -c > codon_position_distribution.txt # Count occurrences and save to file

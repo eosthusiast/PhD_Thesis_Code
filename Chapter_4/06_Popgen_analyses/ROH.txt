@@ -1,0 +1,40 @@
+# Estimating ROH 
+cd /nesi/nobackup/ga03488//David_H/Ppo_Popgen/14_whole_genome_snpcalling/02_variants/
+
+# Create plink files for analysis, first with all sites, including rare SNPs with LD 0.2 cutoff
+module load PLINK/1.09b6.16
+VCF=bcffiltered_SNPs.vcf.gz
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf $VCF --double-id --allow-extra-chr --set-missing-var-ids @:#\$1,\$2 --indep-pairwise 50 10 0.1 --out WG_SNPs_01
+
+# prune and create pca
+plink --vcf $VCF --double-id --allow-extra-chr --set-missing-var-ids @:#\$1,\$2 --extract WG_SNPs.prune.in --make-bed --pca --out WG_SNPs
+    
+# create distance matrix
+plink --bfile WG_SNPs --recode --allow-extra-chr
+plink --file plink --genome --allow-extra-chr
+plink --file plink --cluster --matrix --allow-extra-chr
+plink --file plink --read-genome plink.genome --cluster --mds-plot 4 --allow-extra-chr
+
+# convert plink file to vcf file for ROH
+plink --bfile WG_SNPs --recode vcf --out WG_SNPs_LD01 --allow-extra-chr
+## 123529 variants and 28 people pass filters and QC.
+
+# run bcftools ROH
+cd ./plink_WG_SNPs_LD02
+# calcaulte allele frequencies
+bcftools +fill-tags WG_SNPs_LD01.vcf  -o WG_SNPs_LD01_with_AF.vcf -- -t AF
+
+
+bcftools roh -G30 --AF-tag AF WG_SNPs_LD01_with_AF.vcf > WG_SNPs_ROH_01.txt
+#Number of target samples: 28
+#Number of --estimate-AF samples: 0
+#Number of sites in the buffer/overlap: unlimited
+#Number of lines total/processed: 123529/123529
+#Number of lines filtered/no AF/no alt/multiallelic/dup: 0/0/0/0/0
+
+
+# filter to only keep ROHs > 1kb
+awk '$6 >= 1000' WG_SNPs_ROH_01.txt > filtered_roh_LD01.txt
+
+cd ../plink_WG_SNPs
