@@ -1,0 +1,432 @@
+---
+title: "Ch3Pangenome"
+author: "DH"
+date: "2024-07-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "C:/Users/herad/OneDrive - MWLR/Fungi, Food and Fodder/03 - Molecular work/PopGen Bioinformatics/05_pangenome")
+
+```
+
+# Load libraries
+```{r}
+library(vegan)
+library(ecodist)
+```
+
+# Import files
+```{r}
+# Assuming you have read the data into a dataframe
+pangenome_info <- read.table("All_pangenome_info.txt", header = TRUE, sep = "\t")
+
+# Read Gene_counts.txt
+gene_counts <- read.table("Gene_counts.txt", header = TRUE, sep = "\t")
+
+# Filter for accessory genes
+accessory_genes <- subset(pangenome_info, Pangenome_category == "Accessory")
+secretome_genes <- subset(accessory_genes, Secretome == "Yes")
+secretome_genes <- subset(accessory_genes, EffecorP_candidate == "Yes")
+
+# Extract the accessory gene clusters
+accessory_clusters <- unique(accessory_genes$Pangenome_cluster)
+secretome_clusters <- unique(secretome_genes$Pangenome_cluster)
+
+# Subset the gene counts data to only include accessory clusters
+accessory_gene_counts <- subset(gene_counts, Clusters %in% accessory_clusters)
+secretome_gene_counts <- subset(gene_counts, Clusters %in% secretome_clusters)
+
+```
+
+# Accessory gene profiles: Create distance matrix 
+```{r}
+# Remove the Clusters column
+accessory_gene_counts_matrix <- accessory_gene_counts[, -1]
+
+# Ensure the matrix is numeric
+accessory_gene_counts_matrix <- as.matrix(sapply(accessory_gene_counts_matrix, as.numeric))
+
+# Convert non-zero values to 1 (presence) and keep 0 as absence
+presence_absence_matrix <- accessory_gene_counts_matrix
+presence_absence_matrix[presence_absence_matrix > 0] <- 1
+
+# Subset presence absence matrix to Arthur's Pass 
+sample_valleys_only[28] <- "Klondyke"
+sample_ids_AP <- sample_ids_29[c(-1, -5, -6, -24, -25, -29)]
+sample_valles_AP <- sample_valleys_only[c(-1, -5, -6, -24, -25, -29)]
+presence_absence_matrix_AP <- presence_absence_matrix[,c(-1, -5, -6, -24, -25, -29)]
+
+
+# Calculate Bray-Curtis distance matrix
+bray_curtis_dist <- vegdist(t(presence_absence_matrix), method = "bray")
+bray_curtis_dist_AP <- vegdist(t(presence_absence_matrix_AP), method = "bray")
+```
+
+# PERMANOVA
+```{r}
+adonis2(bray_curtis_dist ~ sample_loc_coarse_pop, by = "margin")
+adonis2(bray_curtis_dist ~ sample_valleys_only, by = "margin")
+adonis2(bray_curtis_dist_AP ~ sample_valles_AP, by = "margin")
+```
+# PCoA all
+
+
+```{r}
+pcoa_result <- pco(bray_curtis_dist)
+
+# Assuming `pcoa_result` is your PCoA result and has an `eig` or similar component with eigenvectors/eigenvalues
+eigenvalues <- pcoa_result$values  # Adjust this depending on your object structure
+
+# Calculate the percent variance explained for each axis
+percent_variance_explained <- (eigenvalues / sum(eigenvalues)) * 100
+
+# Get the percent variance explained for the first two axes
+percent_variance_axis1 <- percent_variance_explained[1]
+percent_variance_axis2 <- percent_variance_explained[2]
+percent_variance_axis3 <- percent_variance_explained[3]
+percent_variance_axis4 <- percent_variance_explained[4]
+
+# Print the variance explained for the first two axes
+cat("Variance explained by Axis 1:", percent_variance_axis1, "%\n")
+cat("Variance explained by Axis 2:", percent_variance_axis2, "%\n")
+
+# Extract the first two axes from the PCoA result
+pcoa_coords <- as.data.frame(pcoa_result$vectors[, 1:4])  # Assuming the PCoA result has a 'vectors' component
+colnames(pcoa_coords) <- c("Axis1", "Axis2","Axis3", "Axis4")  # Name the axes
+
+# Add sample labels and colors from 'sample_valleys_only'
+pcoa_coords$Sample <- sample_valleys_only  # Add your vector to the dataframe
+#pcoa_coords$Sample <- sample_loc_coarse_pop  # Add your vector to the dataframe
+
+# Function to calculate the convex hull for each group
+find_hull <- function(df) df[chull(df$Axis1, df$Axis2), ]
+
+# Apply the function to each group
+hull_data <- pcoa_coords %>%
+  group_by(Sample) %>%
+  do(find_hull(.))
+
+# Create the PCoA plot with convex hulls (spider plot)
+ggplot(pcoa_coords, aes(x = Axis1, y = Axis2, label = Sample, color = Sample)) +
+  geom_point(size = 3) +  # Plot points
+  geom_text(vjust = 1.5, size = 3) +  # Add text labels
+  geom_polygon(data = hull_data, aes(fill = Sample, group = Sample), alpha = 0.3) +  # Add convex hulls
+  labs(title = "PCoA of Accessory Gene Cluster Profiles", 
+       x = paste0("PCoA1 (", round(percent_variance_axis1, 2), "%)"), 
+       y = paste0("PCoA2 (", round(percent_variance_axis2, 2), "%)")) +  # Dynamic axis labels
+  theme_minimal() +
+  theme(legend.position = "none")  # Optional: Remove legend if not needed
+
+# Function to calculate the convex hull for each group
+find_hull <- function(df) df[chull(df$Axis3, df$Axis4), ]
+
+# Apply the function to each group
+hull_data <- pcoa_coords %>%
+  group_by(Sample) %>%
+  do(find_hull(.))
+
+# Create the PCoA plot with convex hulls (spider plot)
+ggplot(pcoa_coords, aes(x = Axis3, y = Axis4, label = Sample, color = Sample)) +
+  geom_point(size = 3) +  # Plot points
+  geom_text(vjust = 1.5, size = 3) +  # Add text labels
+  geom_polygon(data = hull_data, aes(fill = Sample, group = Sample), alpha = 0.3) +  # Add convex hulls
+  labs(title = "PCoA of Accessory Gene Cluster Profiles", 
+       x = paste0("PCoA3 (", round(percent_variance_axis3, 2), "%)"), 
+       y = paste0("PCoA4 (", round(percent_variance_axis4, 2), "%)")) +  # Dynamic axis labels
+  theme_minimal() +
+  theme(legend.position = "none")  # Optional: Remove legend if not needed
+```
+
+# PCoA Arthur's Pass
+
+
+```{r}
+pcoa_result <- pco(bray_curtis_dist_AP)
+
+# Assuming `pcoa_result` is your PCoA result and has an `eig` or similar component with eigenvectors/eigenvalues
+eigenvalues <- pcoa_result$values  # Adjust this depending on your object structure
+
+# Calculate the percent variance explained for each axis
+percent_variance_explained <- (eigenvalues / sum(eigenvalues)) * 100
+
+# Get the percent variance explained for the first two axes
+percent_variance_axis1 <- percent_variance_explained[1]
+percent_variance_axis2 <- percent_variance_explained[2]
+percent_variance_axis3 <- percent_variance_explained[3]
+percent_variance_axis4 <- percent_variance_explained[4]
+
+# Print the variance explained for the first two axes
+cat("Variance explained by Axis 1:", percent_variance_axis1, "%\n")
+cat("Variance explained by Axis 2:", percent_variance_axis2, "%\n")
+
+# Extract the first two axes from the PCoA result
+pcoa_coords <- as.data.frame(pcoa_result$vectors[, 1:4])  # Assuming the PCoA result has a 'vectors' component
+colnames(pcoa_coords) <- c("Axis1", "Axis2","Axis3", "Axis4")  # Name the axes
+
+# Add sample labels and colors from 'sample_valleys_only'
+pcoa_coords$Sample <- sample_valles_AP  # Add your vector to the dataframe
+#pcoa_coords$Sample <- sample_loc_coarse_pop  # Add your vector to the dataframe
+
+# Function to calculate the convex hull for each group
+find_hull <- function(df) df[chull(df$Axis1, df$Axis2), ]
+
+# Apply the function to each group
+hull_data <- pcoa_coords %>%
+  group_by(Sample) %>%
+  do(find_hull(.))
+
+# Create the PCoA plot with convex hulls (spider plot)
+ggplot(pcoa_coords, aes(x = Axis1, y = Axis2, label = Sample, color = Sample)) +
+  geom_point(size = 3) +  # Plot points
+  geom_text(vjust = 1.5, size = 3) +  # Add text labels
+  geom_polygon(data = hull_data, aes(fill = Sample, group = Sample), alpha = 0.3) +  # Add convex hulls
+  labs(title = "PCoA of Accessory Gene Cluster Profiles", 
+       x = paste0("PCoA1 (", round(percent_variance_axis1, 2), "%)"), 
+       y = paste0("PCoA2 (", round(percent_variance_axis2, 2), "%)")) +  # Dynamic axis labels
+  theme_minimal() +
+  theme(legend.position = "none")  # Optional: Remove legend if not needed
+
+# Function to calculate the convex hull for each group
+find_hull <- function(df) df[chull(df$Axis3, df$Axis4), ]
+
+# Apply the function to each group
+hull_data <- pcoa_coords %>%
+  group_by(Sample) %>%
+  do(find_hull(.))
+
+# Create the PCoA plot with convex hulls (spider plot)
+ggplot(pcoa_coords, aes(x = Axis3, y = Axis4, label = Sample, color = Sample)) +
+  geom_point(size = 3) +  # Plot points
+  geom_text(vjust = 1.5, size = 3) +  # Add text labels
+  geom_polygon(data = hull_data, aes(fill = Sample, group = Sample), alpha = 0.3) +  # Add convex hulls
+  labs(title = "PCoA of Accessory Gene Cluster Profiles", 
+       x = paste0("PCoA3 (", round(percent_variance_axis3, 2), "%)"), 
+       y = paste0("PCoA4 (", round(percent_variance_axis4, 2), "%)")) +  # Dynamic axis labels
+  theme_minimal() +
+  theme(legend.position = "none")  # Optional: Remove legend if not needed
+```
+
+
+# Geography vs accessory gene distance
+```{r}
+# Convert matrices to vectors and remove diagonal
+acc_dist <- as.matrix(bray_curtis_dist)
+geo_vector <- geo_dist_pankmer[lower.tri(geo_dist_pankmer)]
+geno_vector <- acc_dist[lower.tri(acc_dist)]
+
+# Plot
+plot(geo_vector, geno_vector,
+     xlab = "Geographic Distance",
+     ylab = "Accessory region Distance",
+     main = "Scatter Plot of Geographic vs. Genomic Distances",
+     pch = 19, col = "blue",)
+     #ylim = c(0.3,0.8))
+```
+
+
+Avg pairwise distances
+```{r}
+# Calculate average distances for each sample
+avg_geo_dist <- rowMeans(geo_dist_pankmer)
+avg_geno_dist <- rowMeans(as.matrix(bray_curtis_dist))
+
+# Create a data frame for plotting
+data <- data.frame(Sample = sample_ids_pankmer,
+                   Avg_Geo_Distance = avg_geo_dist,
+                   Avg_Geno_Similarity = avg_geno_dist)
+
+# Plot
+ggplot(data, aes(x = Avg_Geo_Distance, y = Avg_Geno_Similarity, label = Sample)) +
+  geom_point(color = "blue", size = 3) +
+  geom_text(vjust = -0.5, hjust = 0.5, size = 3) +
+  labs(x = "Average Geographic Distance", y = "Accessory region distance", 
+       title = "Average Distances per Sample") # + xlim(45000, 60000)
+  theme_minimal()
+```
+
+# Cluster heatmap
+```{r}
+PleuSNPs_heatmap <- pheatmap(bray_curtis_dist, 
+         cluster_rows = TRUE, 
+         cluster_cols = TRUE, 
+         color = viridis(256),  # Use viridis color palette
+         labels_row = sample_ids_29,  # Label the rows
+         labels_col = sample_valleys_only,  # Label the rows
+         show_rownames = TRUE, 
+         show_colnames = TRUE, 
+         legend = TRUE,  # Add legend
+         border_color = NA,
+         fontsize = 6)  # Remove border color
+
+ggsave(filename = "Ppo_pangenome_accessory_heatmap.png", plot = PleuSNPs_heatmap, width = 9, height = 8, dpi = 200, bg = "white")
+```
+
+# Secretome gene profiles: Create distance matrix 
+```{r}
+# Remove the Clusters column
+secretome_gene_counts_matrix <- secretome_gene_counts[, -1]
+
+# Ensure the matrix is numeric
+secretome_gene_counts_matrix <- as.matrix(sapply(secretome_gene_counts_matrix, as.numeric))
+
+# Convert non-zero values to 1 (presence) and keep 0 as absence
+presence_absence_matrix <- secretome_gene_counts_matrix
+presence_absence_matrix[presence_absence_matrix > 0] <- 1
+
+# Subset presence absence matrix to Arthur's Pass 
+sample_valleys_only[28] <- "Klondyke"
+sample_ids_AP <- sample_ids_29[c(-1, -5, -6, -24, -25, -29)]
+sample_valles_AP <- sample_valleys_only[c(-1, -5, -6, -24, -25, -29)]
+presence_absence_matrix_AP <- presence_absence_matrix[,c(-1, -5, -6, -24, -25, -29)]
+
+
+# Calculate Bray-Curtis distance matrix
+bray_curtis_dist <- vegdist(t(presence_absence_matrix), method = "bray")
+bray_curtis_dist_AP <- vegdist(t(presence_absence_matrix_AP), method = "bray")
+```
+
+# PERMANOVA
+```{r}
+adonis2(bray_curtis_dist ~ sample_loc_coarse_pop, by = "margin")
+adonis2(bray_curtis_dist ~ sample_valleys_only, by = "margin")
+adonis2(bray_curtis_dist_AP ~ sample_valles_AP, by = "margin")
+```
+# PCoA all
+
+
+```{r}
+pcoa_result <- pco(bray_curtis_dist)
+
+# Assuming `pcoa_result` is your PCoA result and has an `eig` or similar component with eigenvectors/eigenvalues
+eigenvalues <- pcoa_result$values  # Adjust this depending on your object structure
+
+# Calculate the percent variance explained for each axis
+percent_variance_explained <- (eigenvalues / sum(eigenvalues)) * 100
+
+# Get the percent variance explained for the first two axes
+percent_variance_axis1 <- percent_variance_explained[1]
+percent_variance_axis2 <- percent_variance_explained[2]
+percent_variance_axis3 <- percent_variance_explained[3]
+percent_variance_axis4 <- percent_variance_explained[4]
+
+# Print the variance explained for the first two axes
+cat("Variance explained by Axis 1:", percent_variance_axis1, "%\n")
+cat("Variance explained by Axis 2:", percent_variance_axis2, "%\n")
+
+# Extract the first two axes from the PCoA result
+pcoa_coords <- as.data.frame(pcoa_result$vectors[, 1:4])  # Assuming the PCoA result has a 'vectors' component
+colnames(pcoa_coords) <- c("Axis1", "Axis2","Axis3", "Axis4")  # Name the axes
+
+# Add sample labels and colors from 'sample_valleys_only'
+pcoa_coords$Sample <- sample_valleys_only  # Add your vector to the dataframe
+#pcoa_coords$Sample <- sample_loc_coarse_pop  # Add your vector to the dataframe
+
+# Function to calculate the convex hull for each group
+find_hull <- function(df) df[chull(df$Axis1, df$Axis2), ]
+
+# Apply the function to each group
+hull_data <- pcoa_coords %>%
+  group_by(Sample) %>%
+  do(find_hull(.))
+
+# Create the PCoA plot with convex hulls (spider plot)
+ggplot(pcoa_coords, aes(x = Axis1, y = Axis2, label = Sample, color = Sample)) +
+  geom_point(size = 3) +  # Plot points
+  geom_text(vjust = 1.5, size = 3) +  # Add text labels
+  geom_polygon(data = hull_data, aes(fill = Sample, group = Sample), alpha = 0.3) +  # Add convex hulls
+  labs(title = "PCoA of secretome Gene Cluster Profiles", 
+       x = paste0("PCoA1 (", round(percent_variance_axis1, 2), "%)"), 
+       y = paste0("PCoA2 (", round(percent_variance_axis2, 2), "%)")) +  # Dynamic axis labels
+  theme_minimal() +
+  theme(legend.position = "none")  # Optional: Remove legend if not needed
+
+# Function to calculate the convex hull for each group
+find_hull <- function(df) df[chull(df$Axis3, df$Axis4), ]
+
+# Apply the function to each group
+hull_data <- pcoa_coords %>%
+  group_by(Sample) %>%
+  do(find_hull(.))
+
+# Create the PCoA plot with convex hulls (spider plot)
+ggplot(pcoa_coords, aes(x = Axis3, y = Axis4, label = Sample, color = Sample)) +
+  geom_point(size = 3) +  # Plot points
+  geom_text(vjust = 1.5, size = 3) +  # Add text labels
+  geom_polygon(data = hull_data, aes(fill = Sample, group = Sample), alpha = 0.3) +  # Add convex hulls
+  labs(title = "PCoA of secretome Gene Cluster Profiles", 
+       x = paste0("PCoA3 (", round(percent_variance_axis3, 2), "%)"), 
+       y = paste0("PCoA4 (", round(percent_variance_axis4, 2), "%)")) +  # Dynamic axis labels
+  theme_minimal() +
+  theme(legend.position = "none")  # Optional: Remove legend if not needed
+```
+
+# PCoA Arthur's Pass
+
+
+```{r}
+pcoa_result <- pco(bray_curtis_dist_AP)
+
+# Assuming `pcoa_result` is your PCoA result and has an `eig` or similar component with eigenvectors/eigenvalues
+eigenvalues <- pcoa_result$values  # Adjust this depending on your object structure
+
+# Calculate the percent variance explained for each axis
+percent_variance_explained <- (eigenvalues / sum(eigenvalues)) * 100
+
+# Get the percent variance explained for the first two axes
+percent_variance_axis1 <- percent_variance_explained[1]
+percent_variance_axis2 <- percent_variance_explained[2]
+percent_variance_axis3 <- percent_variance_explained[3]
+percent_variance_axis4 <- percent_variance_explained[4]
+
+# Print the variance explained for the first two axes
+cat("Variance explained by Axis 1:", percent_variance_axis1, "%\n")
+cat("Variance explained by Axis 2:", percent_variance_axis2, "%\n")
+
+# Extract the first two axes from the PCoA result
+pcoa_coords <- as.data.frame(pcoa_result$vectors[, 1:4])  # Assuming the PCoA result has a 'vectors' component
+colnames(pcoa_coords) <- c("Axis1", "Axis2","Axis3", "Axis4")  # Name the axes
+
+# Add sample labels and colors from 'sample_valleys_only'
+pcoa_coords$Sample <- sample_valles_AP  # Add your vector to the dataframe
+#pcoa_coords$Sample <- sample_loc_coarse_pop  # Add your vector to the dataframe
+
+# Function to calculate the convex hull for each group
+find_hull <- function(df) df[chull(df$Axis1, df$Axis2), ]
+
+# Apply the function to each group
+hull_data <- pcoa_coords %>%
+  group_by(Sample) %>%
+  do(find_hull(.))
+
+# Create the PCoA plot with convex hulls (spider plot)
+ggplot(pcoa_coords, aes(x = Axis1, y = Axis2, label = Sample, color = Sample)) +
+  geom_point(size = 3) +  # Plot points
+  geom_text(vjust = 1.5, size = 3) +  # Add text labels
+  geom_polygon(data = hull_data, aes(fill = Sample, group = Sample), alpha = 0.3) +  # Add convex hulls
+  labs(title = "PCoA of secretome Gene Cluster Profiles", 
+       x = paste0("PCoA1 (", round(percent_variance_axis1, 2), "%)"), 
+       y = paste0("PCoA2 (", round(percent_variance_axis2, 2), "%)")) +  # Dynamic axis labels
+  theme_minimal() +
+  theme(legend.position = "none")  # Optional: Remove legend if not needed
+
+# Function to calculate the convex hull for each group
+find_hull <- function(df) df[chull(df$Axis3, df$Axis4), ]
+
+# Apply the function to each group
+hull_data <- pcoa_coords %>%
+  group_by(Sample) %>%
+  do(find_hull(.))
+
+# Create the PCoA plot with convex hulls (spider plot)
+ggplot(pcoa_coords, aes(x = Axis3, y = Axis4, label = Sample, color = Sample)) +
+  geom_point(size = 3) +  # Plot points
+  geom_text(vjust = 1.5, size = 3) +  # Add text labels
+  geom_polygon(data = hull_data, aes(fill = Sample, group = Sample), alpha = 0.3) +  # Add convex hulls
+  labs(title = "PCoA of secretome Gene Cluster Profiles", 
+       x = paste0("PCoA3 (", round(percent_variance_axis3, 2), "%)"), 
+       y = paste0("PCoA4 (", round(percent_variance_axis4, 2), "%)")) +  # Dynamic axis labels
+  theme_minimal() +
+  theme(legend.position = "none")  # Optional: Remove legend if not needed
+```
