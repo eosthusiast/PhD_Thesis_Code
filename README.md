@@ -1,4 +1,4 @@
-# Uniformity is a myth : insights from Aotearoa New Zealand _Pleurotus_ on intraspecific variation in fungal genotypes and phenotypes.
+# Uniformity is a myth: insights from Aotearoa New Zealand _Pleurotus_ on intraspecific variation in fungal genotypes and phenotypes
 This reposity holds various code snippets and scripts used for data analysis and bioinformatics in my 2024 PhD thesis. Within each directory is a brief overview of chapter contents and details about each of the tools used. 
 
 For a brief outline of chapter contents:
